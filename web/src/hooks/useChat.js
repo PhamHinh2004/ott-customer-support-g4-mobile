@@ -50,12 +50,12 @@ export const useChat = () => {
         name,
         isGroup: type === 'GROUP' 
       });
-      await fetchConversations();
+      await dispatch(fetchConversations());
       return { payload: result.data || result };
     } catch (err) {
       return { error: err };
     }
-  }, [fetchConversations]);
+  }, [dispatch]);
 
   const inviteMember = useCallback(async (conversationId, userId) => {
     try {

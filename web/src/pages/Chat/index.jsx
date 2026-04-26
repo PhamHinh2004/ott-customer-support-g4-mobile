@@ -31,8 +31,10 @@ const Chat = () => {
     conversations, 
     activeConversationId, 
     fetchConversations, 
+    fetchFriends,
     fetchMessages,
     selectConversation,
+    friends,
     loading 
   } = useChat();
 
@@ -46,6 +48,7 @@ const Chat = () => {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isDeleteAccountOpen, setIsDeleteAccountOpen] = useState(false);
+  const [pendingStrangerConversationIds, setPendingStrangerConversationIds] = useState([]);
 
   // Call management
   const [localStream, setLocalStream] = useState(null);
@@ -63,6 +66,7 @@ const Chat = () => {
 
   useEffect(() => {
     fetchConversations();
+    fetchFriends();
     // Fetch initial notifications
     const fetchNotifications = () => {
       friendApi.getPendingRequests().then(res => {
@@ -77,7 +81,7 @@ const Chat = () => {
     // Auto-refresh notifications every 30 seconds as fallback
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
-  }, [fetchConversations, dispatch]);
+  }, [fetchConversations, fetchFriends, dispatch]);
 
   useEffect(() => {
     const disconnect = connect((stream) => setRemoteStream(stream));
@@ -179,8 +183,66 @@ const Chat = () => {
 
   const isMobile = useMediaQuery('(max-width: 1024px)');
   const [searchTerm, setSearchTerm] = useState('');
+  const initiatedByMeConversationIds = (() => {
+    const currentUserId = user?.userId || user?.id;
+    if (!currentUserId) return new Set();
 
-  const filteredConversations = conversations.filter(conv => {
+    try {
+      const raw = localStorage.getItem(`chat.initiatedByMe.${currentUserId}`);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      return new Set();
+    }
+  })();
+
+  const visibleConversations = conversations.filter((conv) => {
+    if (conv.type !== 'SINGLE') return true;
+    if (conv.conversationId === activeConversationId) return true;
+    if ((conv.unreadCount || 0) > 0) return true;
+
+    const hasRealLastMessage = Boolean(
+      conv.lastMessageSenderId &&
+      typeof conv.lastMessage === 'string' &&
+      conv.lastMessage.trim()
+    );
+
+    return hasRealLastMessage;
+  });
+
+  useEffect(() => {
+    setPendingStrangerConversationIds((previousIds) => {
+      const nextIds = new Set(previousIds);
+
+      visibleConversations.forEach((conv) => {
+        if (conv.type !== 'SINGLE' || conv.isAI) return;
+
+        const otherMember = conv.members?.find((m) => String(m.userId || m.id || '') !== String(user?.userId || user?.id || ''));
+        const otherMemberId = otherMember?.userId || otherMember?.id;
+        if (!otherMemberId) return;
+
+        const friend = Array.isArray(friends) && friends.find((f) => {
+          const fId = String(f.userId || f.id || f.friendId || '').toLowerCase();
+          const mId = String(otherMemberId).toLowerCase();
+          return fId !== '' && fId === mId;
+        });
+
+        const isAcceptedOrBlocked = friend && ['ACCEPTED', 'BLOCKED'].includes(friend.status);
+        const initiatedByMe = initiatedByMeConversationIds.has(conv.conversationId);
+        const shouldFlagPending = !initiatedByMe && !isAcceptedOrBlocked && (conv.requiresConfirmation || (conv.unreadCount || 0) > 0);
+
+        if (shouldFlagPending) {
+          nextIds.add(conv.conversationId);
+        }
+      });
+
+      return Array.from(nextIds).filter((conversationId) =>
+        conversations.some((conv) => String(conv.conversationId) === String(conversationId))
+      );
+    });
+  }, [conversations, friends, user?.userId, user?.id, visibleConversations]);
+
+  const filteredConversations = visibleConversations.filter(conv => {
     const searchLower = searchTerm.toLowerCase();
     
     // 1. Check conversation name
@@ -195,6 +257,34 @@ const Chat = () => {
     
     return false;
   });
+
+  const strangerMessageConversations = visibleConversations.filter((conv) =>
+    pendingStrangerConversationIds.some((conversationId) => String(conversationId) === String(conv.conversationId))
+  );
+
+  const totalNotificationCount = unreadCount + strangerMessageConversations.length;
+  const pendingStrangerConversation = strangerMessageConversations.find(
+    (conv) => String(conv.conversationId) === String(activeConversationId)
+  );
+
+  const handleAcceptStrangerMessage = (conversationId) => {
+    setPendingStrangerConversationIds((previousIds) => previousIds.filter((id) => String(id) !== String(conversationId)));
+    selectConversation(conversationId);
+    setIsNotificationOpen(false);
+  };
+
+  const handleDenyStrangerMessage = async (conversationId) => {
+    try {
+      await chatApi.deleteConversation(conversationId);
+      setPendingStrangerConversationIds((previousIds) => previousIds.filter((id) => String(id) !== String(conversationId)));
+      await fetchConversations();
+      if (activeConversationId === conversationId) {
+        selectConversation(null);
+      }
+    } catch (err) {
+      console.error('Failed to deny stranger conversation', err);
+    }
+  };
 
   return (
     <div className={`flex h-screen bg-background overflow-hidden font-primary relative ${isDark ? 'dark' : ''}`}>
@@ -268,9 +358,9 @@ const Chat = () => {
                 `}
               >
                 <Bell size={isMobile ? 22 : 24} />
-                {unreadCount > 0 && (
+                {totalNotificationCount > 0 && (
                   <div className="absolute top-2 right-2 min-w-[20px] h-[20px] px-1 bg-red-500 rounded-full flex items-center justify-center border-2 border-[#0b0e14]">
-                    <span className="text-[10px] font-black text-white">{unreadCount}</span>
+                    <span className="text-[10px] font-black text-white">{totalNotificationCount}</span>
                   </div>
                 )}
               </button>
@@ -427,6 +517,9 @@ const Chat = () => {
                 isInfoOpen={isInfoOpen}
                 onBack={isMobile ? () => selectConversation(null) : undefined}
                 onRefreshMessages={() => fetchMessages(activeConversationId)}
+                isPendingStranger={Boolean(pendingStrangerConversation)}
+                onAcceptStranger={() => handleAcceptStrangerMessage(activeConversationId)}
+                onDenyStranger={() => handleDenyStrangerMessage(activeConversationId)}
               />
             ) : !isMobile ? (
               <div className="flex-1 flex flex-col items-center justify-center text-cursor-dark/10 p-12">
@@ -551,7 +644,13 @@ const Chat = () => {
       <ChangePasswordModal isOpen={isChangePasswordOpen} onClose={() => setIsChangePasswordOpen(false)} />
       <SearchUserModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
       <CreateGroupModal isOpen={isGroupModalOpen} onClose={() => setIsGroupModalOpen(false)} />
-      <NotificationModal isOpen={isNotificationOpen} onClose={() => setIsNotificationOpen(false)} />
+      <NotificationModal
+        isOpen={isNotificationOpen}
+        onClose={() => setIsNotificationOpen(false)}
+        strangerConversations={strangerMessageConversations}
+        onAcceptStranger={handleAcceptStrangerMessage}
+        onDenyStranger={handleDenyStrangerMessage}
+      />
       <DeleteAccountModal isOpen={isDeleteAccountOpen} onClose={() => setIsDeleteAccountOpen(false)} />
       
       <VideoCall 

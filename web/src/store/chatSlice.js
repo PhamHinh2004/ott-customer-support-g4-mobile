@@ -97,6 +97,12 @@ const chatSlice = createSlice({
       if (conv) {
         conv.lastMessage = message.content;
         conv.lastMessageTime = message.createdAt;
+        conv.lastMessageSenderId = message.senderId;
+        conv.lastMessageSenderName = message.senderName || message.senderFullName || message.senderNickname || conv.lastMessageSenderName;
+
+        if (String(message.senderId) !== String(currentUserId) && conv.type === 'SINGLE' && !conv.isAI) {
+          conv.requiresConfirmation = true;
+        }
 
         if (state.activeConversationId !== conversationId && message.senderId !== currentUserId) {
           conv.unreadCount = (conv.unreadCount || 0) + 1;

@@ -5,11 +5,21 @@ import MessageList from '../MessageList';
 import MessageInput from '../MessageInput';
 import ForwardModal from '../ForwardModal';
 import { chatApi } from '../../api/chatApi';
-import { Phone, Video, Info, MoreVertical, ShieldCheck, Pin, X, ChevronDown, ChevronUp, Trash2, UserPlus, ArrowLeft, Stars as SparklesIcon, Ban, AlertCircle } from 'lucide-react';
+import { Phone, Video, Info, MoreVertical, ShieldCheck, Pin, X, ChevronDown, ChevronUp, Trash2, UserPlus, ArrowLeft, Stars as SparklesIcon, Ban, AlertCircle, MessageSquareWarning } from 'lucide-react';
 import { friendApi } from '../../api/friendApi';
 import GroupAvatar from '../GroupAvatar';
 
-const ChatWindow = ({ conversation, onStartCall, onToggleInfo, isInfoOpen, onBack, onRefreshMessages }) => {
+const ChatWindow = ({
+  conversation,
+  onStartCall,
+  onToggleInfo,
+  isInfoOpen,
+  onBack,
+  onRefreshMessages,
+  isPendingStranger = false,
+  onAcceptStranger,
+  onDenyStranger,
+}) => {
   const conversationId = conversation?.conversationId;
   const { user } = useSelector(state => state.auth);
   const { messages, fetchMessages, fetchConversations, messagesLoading, conversations, friends, fetchFriends } = useChat();
@@ -18,6 +28,8 @@ const ChatWindow = ({ conversation, onStartCall, onToggleInfo, isInfoOpen, onBac
   const [replyingTo, setReplyingTo] = useState(null);
   const [forwardingMessage, setForwardingMessage] = useState(null);
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
+  const [friendRequestLoading, setFriendRequestLoading] = useState(false);
+  const [friendRequestSent, setFriendRequestSent] = useState(false);
 
   useEffect(() => {
     if (replyingTo) {
@@ -49,6 +61,35 @@ const ChatWindow = ({ conversation, onStartCall, onToggleInfo, isInfoOpen, onBac
     if (diff < 3600) return `Active ${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `Active ${Math.floor(diff / 3600)}h ago`;
     return `Active ${Math.floor(diff / 86400)}d ago`;
+  };
+
+  const findFriendRecord = () => {
+    if (!currentMember || !Array.isArray(friends)) return null;
+    const memberId = String(currentMember.userId || currentMember.id || '').toLowerCase();
+    return friends.find((f) => {
+      const fId = String(f.userId || f.id || f.friendId || '').toLowerCase();
+      return fId !== '' && fId === memberId;
+    }) || null;
+  };
+
+  const friendRecord = findFriendRecord();
+  const relationshipStatus = friendRecord?.status || (friendRequestSent ? 'PENDING' : 'STRANGER');
+
+  const handleSendFriendRequest = async () => {
+    if (!currentMember || friendRequestLoading) return;
+    const targetUserId = currentMember.userId || currentMember.id;
+    if (!targetUserId) return;
+
+    setFriendRequestLoading(true);
+    try {
+      await friendApi.sendRequest(targetUserId);
+      setFriendRequestSent(true);
+      fetchFriends();
+    } catch (err) {
+      console.error('Failed to send friend request', err);
+    } finally {
+      setFriendRequestLoading(false);
+    }
   };
 
   const handleDeleteConversation = async () => {
@@ -113,6 +154,7 @@ const ChatWindow = ({ conversation, onStartCall, onToggleInfo, isInfoOpen, onBac
       setShowPinsDropdown(false); // Reset dropdown when switching convs
       setShowMoreMenu(false);
       setReplyingTo(null);
+      setFriendRequestSent(false);
     }
   }, [conversationId, fetchMessages]);
 
@@ -164,28 +206,34 @@ const ChatWindow = ({ conversation, onStartCall, onToggleInfo, isInfoOpen, onBac
               {currentConv?.type === 'SINGLE' && !currentConv?.isAI && (
                 <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider border ${
                   (() => {
-                    const friend = Array.isArray(friends) && friends.find(f => {
-                      const fId = String(f.userId || f.id || f.friendId || '');
-                      const mId = String(currentMember?.userId || currentMember?.id || '');
-                      return fId === mId && fId !== '';
-                    });
-                    if (friend?.status === 'BLOCKED') return 'text-red-500 border-red-500/20 bg-red-500/5';
-                    return friend?.status === 'ACCEPTED' 
+                    if (relationshipStatus === 'BLOCKED') return 'text-red-500 border-red-500/20 bg-red-500/5';
+                    return relationshipStatus === 'ACCEPTED'
                       ? 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5' 
                       : 'text-amber-500 border-amber-500/20 bg-amber-500/5';
                   })()
                 }`}>
                   {(() => {
-                    const friend = Array.isArray(friends) && friends.find(f => {
-                      const fId = String(f.userId || f.id || f.friendId || '').toLowerCase();
-                      const mId = String(currentMember?.userId || currentMember?.id || '').toLowerCase();
-                      return fId !== '' && fId === mId;
-                    });
-                    
-                    if (friend?.status === 'BLOCKED') return 'Bị chặn';
-                    if (friend?.status === 'ACCEPTED') return 'Bạn bè';
+                    if (relationshipStatus === 'BLOCKED') return 'Bị chặn';
+                    if (relationshipStatus === 'ACCEPTED') return 'Bạn bè';
+                    if (relationshipStatus === 'PENDING') return 'Đã gửi lời mời';
                     return 'Người lạ';
                   })()}
+                </span>
+              )}
+
+              {currentConv?.type === 'SINGLE' && !currentConv?.isAI && relationshipStatus === 'STRANGER' && (
+                <button
+                  onClick={handleSendFriendRequest}
+                  disabled={friendRequestLoading}
+                  className="text-[9px] font-black uppercase px-2 py-1 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500/15 transition-all disabled:opacity-50"
+                >
+                  {friendRequestLoading ? 'Đang gửi...' : 'Kết bạn'}
+                </button>
+              )}
+
+              {currentConv?.type === 'SINGLE' && !currentConv?.isAI && relationshipStatus === 'PENDING' && (
+                <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider border border-indigo-500/20 bg-indigo-500/5 text-indigo-500">
+                  Chờ chấp nhận
                 </span>
               )}
               
@@ -277,6 +325,38 @@ const ChatWindow = ({ conversation, onStartCall, onToggleInfo, isInfoOpen, onBac
           </div>
         </div>
       </div>
+
+      {currentConv?.type === 'SINGLE' && !currentConv?.isAI && isPendingStranger && (
+        <div className="mx-4 sm:mx-6 mt-4 p-4 sm:p-5 rounded-[28px] border border-amber-200 bg-amber-50/80 text-amber-900 shadow-lg shadow-amber-500/10 flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <MessageSquareWarning size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-black uppercase tracking-widest text-amber-700/70 mb-1">Tin nhắn chờ xác nhận</p>
+              <p className="text-sm font-semibold text-amber-950/90 leading-relaxed">
+                Bạn đang mở một hội thoại từ người lạ. Hãy chấp nhận để xác nhận hoặc từ chối nếu không muốn tiếp tục.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+            <button
+              type="button"
+              onClick={onDenyStranger}
+              className="px-4 py-2.5 rounded-2xl border border-amber-300 bg-white text-amber-700 font-black uppercase tracking-widest text-[10px] hover:bg-amber-100 transition-all"
+            >
+              Từ chối
+            </button>
+            <button
+              type="button"
+              onClick={onAcceptStranger}
+              className="px-4 py-2.5 rounded-2xl bg-amber-600 text-white font-black uppercase tracking-widest text-[10px] hover:bg-amber-700 transition-all shadow-lg shadow-amber-500/20"
+            >
+              Chấp nhận
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Pinned Messages Bar */}
       {currentConv?.pinnedMessages && currentConv.pinnedMessages.length > 0 && (

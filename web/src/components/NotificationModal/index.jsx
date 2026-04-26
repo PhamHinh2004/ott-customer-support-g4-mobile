@@ -1,13 +1,20 @@
 import React from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { X, Check, UserMinus, Bell, User, Users } from 'lucide-react';
+import { X, UserMinus, Bell, User, Users, MessageSquareWarning } from 'lucide-react';
 import { friendApi } from '../../api/friendApi';
 import { chatApi } from '../../api/chatApi';
 import { removePendingFriend, removePendingGroup } from '../../store/notificationSlice';
 import { fetchConversations, fetchFriends } from '../../store/chatSlice';
 
-const NotificationModal = ({ isOpen, onClose }) => {
+const NotificationModal = ({
+  isOpen,
+  onClose,
+  strangerConversations = [],
+  onAcceptStranger,
+  onDenyStranger
+}) => {
   const { pendingFriends, pendingGroups } = useSelector(state => state.notification);
+  const authUser = useSelector(state => state.auth.user);
   const dispatch = useDispatch();
 
   if (!isOpen) return null;
@@ -51,7 +58,7 @@ const NotificationModal = ({ isOpen, onClose }) => {
     }
   };
 
-  const totalNotifications = pendingFriends.length + pendingGroups.length;
+  const totalNotifications = pendingFriends.length + pendingGroups.length + strangerConversations.length;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md animate-fade-in">
@@ -83,6 +90,53 @@ const NotificationModal = ({ isOpen, onClose }) => {
             </div>
           ) : (
             <>
+              {/* Stranger Messages Section */}
+              {strangerConversations.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Tin nhắn từ người lạ</p>
+                  {strangerConversations.map((conv) => {
+                    const myId = String(authUser?.userId || authUser?.id || '');
+                    const otherMember = conv.members?.find(m => String(m.userId || m.id || '') !== myId) || conv.members?.[0];
+                    const name = otherMember?.fullName || otherMember?.name || conv.name || 'Người lạ';
+
+                    return (
+                      <div key={conv.conversationId} className="p-4 bg-amber-50/40 hover:bg-white border border-amber-100/50 rounded-2xl transition-all group shadow-sm hover:shadow-md">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-12 h-12 rounded-xl bg-amber-100/60 overflow-hidden shadow-inner border border-white">
+                            {otherMember?.avatarUrl || otherMember?.avatar ? (
+                              <img src={otherMember.avatarUrl || otherMember.avatar} className="w-full h-full object-cover" alt="" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-amber-500">
+                                <MessageSquareWarning size={20} />
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-black text-slate-800 truncate">{name}</p>
+                            <p className="text-[10px] font-bold text-amber-600 uppercase tracking-tighter">Tin nhắn mới từ người lạ</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex space-x-2">
+                          <button
+                            onClick={() => onAcceptStranger?.(conv.conversationId)}
+                            className="flex-1 py-2.5 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => onDenyStranger?.(conv.conversationId)}
+                            className="flex-1 py-2.5 bg-white text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-50 hover:text-red-500 border border-slate-100 transition-all"
+                          >
+                            Deny
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Friend Requests Section */}
               {pendingFriends.length > 0 && (
                 <div className="space-y-3">

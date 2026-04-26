@@ -3,6 +3,7 @@ import { Search, X, UserPlus, Check, MessageSquare, User, Zap } from 'lucide-rea
 import { userApi } from '../api/userApi';
 import { friendApi } from '../api/friendApi';
 import { useChat } from '../hooks/useChat';
+import { useAuth } from '../hooks/useAuth';
 
 const cn = (...classes) => classes.filter(Boolean).join(" ");
 
@@ -13,6 +14,7 @@ const SearchUserModal = ({ isOpen, onClose, isPanel = false }) => {
   const [requestSent, setRequestSent] = useState(false);
   const [error, setError] = useState('');
   const { create, selectConversation, friends } = useChat();
+  const { user } = useAuth();
 
   if (!isOpen) return null;
 
@@ -57,8 +59,32 @@ const SearchUserModal = ({ isOpen, onClose, isPanel = false }) => {
     try {
       const result = await create('SINGLE', [foundUser.userId]);
       if (result.payload) {
-        const convId = result.payload.conversationId || result.payload?.data?.conversationId;
-        if (convId) selectConversation(convId);
+        const convId =
+          result.payload?.conversationId ||
+          result.payload?.id ||
+          result.payload?.data?.conversationId ||
+          result.payload?.data?.id;
+
+        if (!convId) {
+          setError('Không thể mở cuộc trò chuyện. Vui lòng thử lại.');
+          return;
+        }
+
+        const currentUserId = user?.userId || user?.id;
+        if (currentUserId) {
+          const storageKey = `chat.initiatedByMe.${currentUserId}`;
+          try {
+            const raw = localStorage.getItem(storageKey);
+            const ids = raw ? JSON.parse(raw) : [];
+            if (!ids.includes(convId)) {
+              localStorage.setItem(storageKey, JSON.stringify([...ids, convId]));
+            }
+          } catch {
+            localStorage.setItem(storageKey, JSON.stringify([convId]));
+          }
+        }
+
+        selectConversation(convId);
         onClose();
       } else {
         setError(result.error?.message || 'Không thể tạo cuộc trò chuyện');

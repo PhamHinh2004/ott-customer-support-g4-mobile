@@ -23,6 +23,7 @@ let _presenceSubscription = null;
 export const useWebSocket = () => {
     const dispatch = useDispatch();
     const { token, user } = useSelector(state => state.auth);
+    const conversations = useSelector(state => state.chat.conversations);
 
     const userRef = useRef(user);
 
@@ -45,6 +46,14 @@ export const useWebSocket = () => {
                     message: event.payload,
                     currentUserId
                 }));
+                const conversationExists = Array.isArray(conversations)
+                  && conversations.some(conv => String(conv.conversationId) === String(event.conversationId));
+
+                // Only refresh when this is a brand new thread locally.
+                // For existing threads, refetching would overwrite the optimistic unread state.
+                if (!conversationExists) {
+                    dispatch(fetchConversations());
+                }
             } else if (event.eventType === 'MESSAGE_RECALL') {
                 dispatch(recallMessage({
                     conversationId: event.conversationId,
@@ -90,8 +99,6 @@ export const useWebSocket = () => {
                     messageId: payload.messageId || payload,
                     userId: payload.userId || event.userId
                 }));
-            } else if (event.eventType === 'CONVERSATION_UPDATE' || event.eventType === 'MESSAGE_PIN' || event.eventType === 'MESSAGE_UNPIN') {
-
             } else if (event.eventType === 'WALLPAPER_UPDATED') {
                 const payload = event.payload || {};
                 const conversationId = event.conversationId || payload.conversationId;
@@ -122,7 +129,7 @@ export const useWebSocket = () => {
         } catch (err) {
             console.error('[STOMP] Error in message handler:', err);
         }
-    }, [dispatch]);
+    }, [dispatch, conversations]);
 
     const handlePresenceUpdate = useCallback((message) => {
         try {
