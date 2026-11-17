@@ -2,7 +2,7 @@ name: Deploy Backend to AWS EC2
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ clean-main, main, develop ]
     paths:
       - 'backend/**'
       - 'whisper/**'
