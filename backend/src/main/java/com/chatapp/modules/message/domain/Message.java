@@ -1,0 +1,252 @@
+package com.chatapp.modules.message.domain;
+
+import com.amazonaws.services.dynamodbv2.datamodeling.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Message domain entity
+ * Stored in DynamoDB with conversationId as PK and messageId as SK
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@DynamoDBTable(tableName = "chat_messages")
+public class Message {
+
+    @DynamoDBHashKey(attributeName = "conversationId")
+    private String conversationId;
+
+    @DynamoDBRangeKey(attributeName = "messageId")
+    private String messageId;
+
+    @DynamoDBAttribute(attributeName = "senderId")
+    @DynamoDBIndexHashKey(globalSecondaryIndexName = "senderIndex")
+    @com.fasterxml.jackson.annotation.JsonProperty("senderId")
+    private String senderId;
+
+    @DynamoDBAttribute(attributeName = "senderName")
+    @com.fasterxml.jackson.annotation.JsonProperty("senderName")
+    private String senderName;
+
+    @DynamoDBAttribute(attributeName = "content")
+    @com.fasterxml.jackson.annotation.JsonProperty("content")
+    private String content; // Encrypted if E2E enabled
+
+    @DynamoDBAttribute(attributeName = "type")
+    @com.fasterxml.jackson.annotation.JsonProperty("type")
+    private String type; // TEXT, IMAGE, FILE, VIDEO, AUDIO, STICKER
+
+    @DynamoDBAttribute(attributeName = "mediaUrls")
+    @com.fasterxml.jackson.annotation.JsonProperty("mediaUrls")
+    private List<String> mediaUrls;
+
+    @DynamoDBAttribute(attributeName = "status")
+    @com.fasterxml.jackson.annotation.JsonProperty("status")
+    private String status; // SENDING, SENT, DELIVERED, READ
+
+    @DynamoDBAttribute(attributeName = "readBy")
+    @com.fasterxml.jackson.annotation.JsonProperty("readBy")
+    private List<ReadReceipt> readBy;
+
+    @DynamoDBAttribute(attributeName = "editedAt")
+    @com.fasterxml.jackson.annotation.JsonProperty("editedAt")
+    private Long editedAt;
+
+    @DynamoDBAttribute(attributeName = "editHistory")
+    @com.fasterxml.jackson.annotation.JsonProperty("editHistory")
+    private List<EditRecord> editHistory;
+
+    @DynamoDBAttribute(attributeName = "recalledAt")
+    @com.fasterxml.jackson.annotation.JsonProperty("recalledAt")
+    private Long recalledAt;
+
+    @DynamoDBAttribute(attributeName = "isRecalled")
+    @com.fasterxml.jackson.annotation.JsonProperty("isRecalled")
+    private Boolean isRecalled;
+
+    @DynamoDBAttribute(attributeName = "updatedAt")
+    private Long updatedAt;
+
+    @DynamoDBAttribute(attributeName = "forwardedFrom")
+    private ForwardInfo forwardedFrom;
+
+    @DynamoDBAttribute(attributeName = "replyTo")
+    @com.fasterxml.jackson.annotation.JsonProperty("replyTo")
+    private ReplyInfo replyTo;
+
+    @DynamoDBAttribute(attributeName = "reactions")
+    private Map<String, List<String>> reactions; // emoji -> [userId1, userId2...]
+
+    @DynamoDBAttribute(attributeName = "vote")
+    private VoteInfo vote;
+
+    @DynamoDBAttribute(attributeName = "createdAt")
+    @DynamoDBIndexRangeKey(globalSecondaryIndexName = "senderIndex")
+    private Long createdAt;
+
+    @DynamoDBAttribute(attributeName = "isEncrypted")
+    private Boolean isEncrypted;
+
+    @DynamoDBAttribute(attributeName = "language")
+    @com.fasterxml.jackson.annotation.JsonProperty("language")
+    private String language;
+
+    // Không bắt buộc lưu DB, chỉ dùng tạm cho trả về client
+    @DynamoDBIgnore
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private String transcript;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @DynamoDBDocument
+    public static class VoteInfo {
+        private String question;
+        private List<VoteOption> options;
+        private Boolean allowMultiple;
+        private Long deadline;
+        private Boolean isClosed;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @DynamoDBDocument
+    public static class VoteOption {
+        private String optionId;
+        private String text;
+        private List<String> voterIds;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @DynamoDBDocument
+    public static class ReadReceipt {
+        private String userId;
+        private Long readAt;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @DynamoDBDocument
+    public static class EditRecord {
+        private String content;
+        private Long editedAt;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @DynamoDBDocument
+    public static class ForwardInfo {
+        private String messageId;
+        private String conversationId;
+        private String senderName;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @DynamoDBDocument
+    public static class ReplyInfo {
+        @DynamoDBAttribute(attributeName = "messageId")
+        @com.fasterxml.jackson.annotation.JsonProperty("messageId")
+        private String messageId;
+
+        @DynamoDBAttribute(attributeName = "content")
+        @com.fasterxml.jackson.annotation.JsonProperty("content")
+        private String content;
+
+        @DynamoDBAttribute(attributeName = "senderName")
+        @com.fasterxml.jackson.annotation.JsonProperty("senderName")
+        private String senderName;
+
+        @DynamoDBAttribute(attributeName = "senderId")
+        @com.fasterxml.jackson.annotation.JsonProperty("senderId")
+        private String senderId;
+
+        @DynamoDBAttribute(attributeName = "type")
+        @com.fasterxml.jackson.annotation.JsonProperty("type")
+        private String type;
+
+        @DynamoDBAttribute(attributeName = "mediaUrls")
+        @com.fasterxml.jackson.annotation.JsonProperty("mediaUrls")
+        private List<String> mediaUrls;
+    }
+
+    public static Message create(String conversationId, String messageId, String senderId,
+                                String senderName, String content, String type) {
+        return Message.builder()
+                .conversationId(conversationId)
+                .messageId(messageId)
+                .senderId(senderId)
+                .senderName(senderName)
+                .content(content)
+                .type(type)
+                .status("SENDING")
+                .isRecalled(false)
+                .isEncrypted(false)
+                .createdAt(System.currentTimeMillis())
+                .build();
+    }
+
+    public boolean markAsRead(String userId) {
+        if (readBy == null) {
+            readBy = new java.util.ArrayList<>();
+        }
+        
+        // Check if already read by this user
+        boolean alreadyRead = readBy.stream()
+                .anyMatch(receipt -> receipt.getUserId().equals(userId));
+        
+        if (!alreadyRead) {
+            readBy.add(ReadReceipt.builder()
+                    .userId(userId)
+                    .readAt(System.currentTimeMillis())
+                    .build());
+            return true;
+        }
+        return false;
+    }
+
+    @DynamoDBAttribute(attributeName = "hiddenForUsers")
+    private java.util.List<String> hiddenForUsers;
+
+    public void recall() {
+        this.isRecalled = true;
+        this.recalledAt = System.currentTimeMillis();
+        this.content = "[Tin nhắn đã bị thu hồi]";
+        this.type = "TEXT";
+        this.mediaUrls = new java.util.ArrayList<>();
+    }
+
+    public void editContent(String newContent) {
+        if (editHistory == null) {
+            editHistory = new java.util.ArrayList<>();
+        }
+        
+        editHistory.add(EditRecord.builder()
+                .content(this.content)
+                .editedAt(this.editedAt != null ? this.editedAt : this.createdAt)
+                .build());
+        
+        this.content = newContent;
+        this.editedAt = System.currentTimeMillis();
+    }
+}

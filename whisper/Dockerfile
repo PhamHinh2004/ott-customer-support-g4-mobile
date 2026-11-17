@@ -1,0 +1,17 @@
+# Image cuc nhe - chi la API proxy, khong chay AI model
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Chi cai thu vien Python, khong can ffmpeg hay build tools
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Render inject bien PORT, mac dinh 8000 khi chay local
+ENV PORT=8000
+
+EXPOSE $PORT
+
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port $PORT"]

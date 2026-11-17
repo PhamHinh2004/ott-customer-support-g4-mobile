@@ -1,0 +1,279 @@
+import React, { useEffect } from 'react';
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  SafeAreaView,
+  Alert,
+  RefreshControl,
+  ActivityIndicator,
+} from 'react-native';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { useDispatch, useSelector } from 'react-redux';
+import { useRouter } from 'expo-router';
+import { logoutUser, restoreState } from '../../src/store/authSlice';
+import { clearChatState } from '../../src/store/chatSlice';
+import { userApi } from '../../src/api/userApi';
+import * as SecureStore from 'expo-secure-store';
+import DeleteAccountModal from '../../src/components/DeleteAccountModal';
+import { useTheme } from '../../src/context/ThemeContext';
+import { useTranslation } from 'react-i18next';
+
+
+const ProfileScreen = () => {
+  const { t } = useTranslation();
+  const { colors, isDark } = useTheme();
+  const dispatch = useDispatch();
+
+  const router = useRouter();
+
+  const user = useSelector((state) => state.auth.user);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const [showDeleteModal, setShowDeleteModal] = React.useState(false);
+
+  const fetchLatestProfile = async () => {
+    try {
+      const response = await userApi.getProfile();
+      // Backend thường trả về { data: { ...user } }
+      const updatedUser = response.data || response;
+
+      const token = await SecureStore.getItemAsync('accessToken');
+      const refreshToken = await SecureStore.getItemAsync('refreshToken');
+
+      if (updatedUser) {
+        dispatch(restoreState({
+          user: updatedUser,
+          accessToken: token,
+          refreshToken: refreshToken,
+        }));
+        await SecureStore.setItemAsync('user', JSON.stringify(updatedUser));
+      }
+    } catch (error) {
+      // Bỏ qua log error nếu là 401 vì đã được xử lý toàn cục ở axiosClient
+      if (error.response?.status !== 401) {
+        console.error('Fetch profile error:', error);
+      }
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchLatestProfile();
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    fetchLatestProfile();
+  }, []);
+
+  if (!user) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={{ marginTop: 10, color: colors.foreground }}>{t('chat.loading')}</Text>
+        </View>
+      </SafeAreaView>
+    );
+
+  }
+
+  const displayUser = {
+    userId: user.userId || 'N/A',
+    phoneNumber: user.phoneNumber || 'N/A',
+    email: user.email || t('profile.no_email'),
+    fullName: user.fullName || (user.lastName && user.firstName ? `${user.lastName} ${user.firstName}` : t('common.user')),
+    avatar: user.avatarUrl || user.avatar || `https://ui-avatars.com/api/?name=${user.firstName || 'U'}&background=random`,
+    bio: user.bio || user.statusMessage || t('profile.bio_placeholder'),
+    status: user.status || 'online',
+  };
+
+  const handleLogout = () => {
+    Alert.alert(t('logout.title'), t('logout.confirm_question'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('logout.btn_confirm'), onPress: () => dispatch(logoutUser()), style: 'destructive' },
+    ]);
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
+      >
+
+        {/* Profile Card */}
+        <View style={[styles.headerCard, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+          <TouchableOpacity
+            style={[styles.editIconBtn, { backgroundColor: isDark ? colors.surface300 : '#f1f5f9' }]}
+            onPress={() => router.push('/(main)/edit-profile')}
+          >
+            <MaterialIcons name="edit" size={22} color={colors.textMuted} />
+          </TouchableOpacity>
+
+          <View style={styles.avatarContainer}>
+            <Image source={{ uri: displayUser.avatar }} style={[styles.avatar, { borderColor: colors.border, backgroundColor: colors.surface200 }]} />
+          </View>
+
+          <Text style={[styles.userName, { color: colors.foreground }]}>{displayUser.fullName}</Text>
+          <Text style={[styles.userPhone, { color: colors.textMuted }]}>{displayUser.phoneNumber}</Text>
+
+          <View style={[styles.statusBadge, { backgroundColor: isDark ? colors.surface300 : '#f1f5f9' }]}>
+            <View style={[styles.statusDot, { backgroundColor: displayUser.status === 'online' ? '#10b981' : colors.textSubtle }]} />
+            <Text style={[styles.statusText, { color: colors.textMuted }]}>{displayUser.status === 'online' ? t('sidebar.online') : t('sidebar.offline')}</Text>
+          </View>
+        </View>
+
+
+        {/* Details Section - Khôi phục đầy đủ */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSubtle }]}>{t('info.privacy')}</Text>
+          <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
+            <View style={styles.infoItem}>
+              <Text style={[styles.infoLabel, { color: colors.textSubtle }]}>{t('profile.bio')}</Text>
+              <Text style={[styles.infoValue, { color: colors.foreground }]}>{displayUser.bio}</Text>
+            </View>
+            <View style={[styles.infoDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.infoItem}>
+              <Text style={[styles.infoLabel, { color: colors.textSubtle }]}>{t('profile.email')}</Text>
+              <Text style={[styles.infoValue, { color: colors.foreground }]}>{displayUser.email}</Text>
+            </View>
+            <View style={[styles.infoDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.infoItem}>
+              <Text style={[styles.infoLabel, { color: colors.textSubtle }]}>{t('profile.user_id')}</Text>
+              <Text style={[styles.infoValue, { color: colors.foreground }]} numberOfLines={1}>{displayUser.userId}</Text>
+            </View>
+          </View>
+        </View>
+
+
+        {/* Personal Storage */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSubtle }]}>{t('info.shared_media')}</Text>
+          <View style={[styles.menuCard, { backgroundColor: colors.card }]}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(main)/my-cloud')}>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="cloud-done-outline" size={20} color={colors.primary} />
+                <Text style={[styles.menuItemText, { color: colors.foreground }]}>{t('cloud.title')}</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={20} color={colors.textSubtle} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Settings */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSubtle }]}>{t('settings.title')}</Text>
+          <View style={[styles.menuCard, { backgroundColor: colors.card }]}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(main)/settings')}>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="settings-outline" size={20} color={colors.primary} />
+                <Text style={[styles.menuItemText, { color: colors.foreground }]}>{t('info.customization')}</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={20} color={colors.textSubtle} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Settings & Support */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSubtle }]}>{t('info.privacy')}</Text>
+          <View style={[styles.menuCard, { backgroundColor: colors.card }]}>
+            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: colors.border }]} onPress={() => router.push('/(main)/change-password')}>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} />
+                <Text style={[styles.menuItemText, { color: colors.foreground }]}>{t('password.title')}</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={20} color={colors.textSubtle} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="log-out-outline" size={20} color="#ef4444" />
+                <Text style={[styles.menuItemText, { color: '#ef4444' }]}>{t('logout.title')}</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+
+        {/* Danger Zone */}
+        <View style={[styles.section, { marginBottom: 30 }]}>
+          <Text style={[styles.sectionTitle, { color: '#ef4444' }]}>{t('delete_account.title')}</Text>
+          <View style={[styles.menuCard, { backgroundColor: colors.card }]}>
+            <TouchableOpacity style={styles.menuItem} onPress={() => setShowDeleteModal(true)}>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                <Text style={[styles.menuItemText, { color: '#ef4444' }]}>{t('delete_account.title')}</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+      </ScrollView>
+
+      <DeleteAccountModal
+        visible={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+      />
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f8fafc' },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  headerCard: {
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    paddingVertical: 30,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+    position: 'relative',
+  },
+  editIconBtn: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    padding: 10,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12,
+  },
+  avatarContainer: { marginBottom: 15 },
+  avatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#f1f5f9', backgroundColor: '#e2e8f0' },
+  userName: { fontSize: 20, fontWeight: '700', color: '#1e293b' },
+  userPhone: { fontSize: 13, color: '#64748b', marginTop: 4, marginBottom: 12 },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  statusDot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
+  statusText: { fontSize: 11, fontWeight: '600', color: '#64748b' },
+  section: { paddingHorizontal: 20, marginTop: 25 },
+  sectionTitle: { fontSize: 12, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 10, marginLeft: 4 },
+  infoCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16 },
+  infoItem: { paddingVertical: 6 },
+  infoLabel: { fontSize: 11, color: '#94a3b8', marginBottom: 4 },
+  infoValue: { fontSize: 14, color: '#1e293b', fontWeight: '500' },
+  infoDivider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 6 },
+  menuCard: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f8fafc' },
+  menuItemLeft: { flexDirection: 'row', alignItems: 'center' },
+  menuItemText: { fontSize: 15, fontWeight: '500', color: '#334155', marginLeft: 12 },
+});
+
+export default ProfileScreen;

@@ -1,0 +1,795 @@
+import React, { useEffect, useState, useRef } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { useChat } from '../../hooks/useChat';
+import { setReplyingTo, setActiveConversation, resetUnreadCount, updateFriendStatus } from '../../store/chatSlice';
+import MessageList from '../MessageList';
+import MessageInput from '../MessageInput';
+import ForwardModal from '../ForwardModal';
+import CreateVoteModal from '../CreateVoteModal';
+import { chatApi } from '../../api/chatApi';
+import { Phone, Video, PanelRight, MoreVertical, MoreHorizontal, ShieldCheck, Pin, X, ChevronDown, ChevronUp, ChevronRight, Trash2, UserPlus, ArrowLeft, Stars as SparklesIcon, Ban, AlertCircle, MessageCircle, Users } from 'lucide-react';
+import { friendApi } from '../../api/friendApi';
+import { notificationApi } from '../../api/notificationApi';
+import GroupAvatar from '../GroupAvatar';
+import { useTheme } from '../../hooks/useTheme';
+
+import { useTranslation } from 'react-i18next';
+
+const cn = (...classes) => classes.filter(Boolean).join(" ");
+
+const ChatWindow = ({ conversation, onStartCall, isCallActive, callStatus, onToggleInfo, isInfoOpen, onBack, onRefreshMessages, openLightbox, allChatImages }) => {
+  const { t } = useTranslation();
+  const { isDark } = useTheme();
+  const conversationId = conversation?.conversationId;
+  const { user } = useSelector(state => state.auth);
+  const { replyingTo } = useSelector(state => state.chat);
+  const dispatch = useDispatch();
+  const { messages, fetchMessages, fetchConversations, messagesLoading, conversations, friends, fetchFriends } = useChat();
+  const [showPinsDropdown, setShowPinsDropdown] = useState(false);
+  const [isTagMenuOpen, setIsTagMenuOpen] = useState(false);
+  const [showStrangerMenu, setShowStrangerMenu] = useState(false);
+  const tagMenuRef = useRef(null);
+  const strangerMenuRef = useRef(null);
+  const hasMoreHistoryRef = useRef(true);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (tagMenuRef.current && !tagMenuRef.current.contains(event.target)) {
+        setIsTagMenuOpen(false);
+      }
+      if (strangerMenuRef.current && !strangerMenuRef.current.contains(event.target)) {
+        setShowStrangerMenu(false);
+      }
+    };
+
+    if (isTagMenuOpen || showStrangerMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isTagMenuOpen, showStrangerMenu]);
+
+  const TAGS = [
+    { key: 'customer', label: t('sidebar.tags.customer'), color: 'bg-red-500', textColor: 'text-red-500', borderColor: 'border-red-500/20', bgColor: 'bg-red-500/5' },
+    { key: 'family', label: t('sidebar.tags.family'), color: 'bg-emerald-500', textColor: 'text-emerald-500', borderColor: 'border-emerald-500/20', bgColor: 'bg-emerald-500/5' },
+    { key: 'work', label: t('sidebar.tags.work'), color: 'bg-orange-500', textColor: 'text-orange-500', borderColor: 'border-orange-500/20', bgColor: 'bg-orange-500/5' },
+    { key: 'friends', label: t('sidebar.tags.friends'), color: 'bg-purple-500', textColor: 'text-purple-500', borderColor: 'border-purple-500/20', bgColor: 'bg-purple-500/5' },
+    { key: 'later', label: t('sidebar.tags.later'), color: 'bg-yellow-500', textColor: 'text-amber-500', borderColor: 'border-amber-500/20', bgColor: 'bg-amber-500/5' },
+    { key: 'colleague', label: t('sidebar.tags.colleague'), color: 'bg-blue-500', textColor: 'text-blue-500', borderColor: 'border-blue-500/20', bgColor: 'bg-blue-500/5' }
+  ];
+
+  const currentConv = conversation || conversations.find(c => c.conversationId === conversationId);
+
+  // Find the other member for status display in single chats
+  const currentMember = currentConv?.members?.find(m => {
+    const mId = String(m.userId || m.id || '');
+    const uId = String(user?.id || user?.userId || '');
+    return mId !== uId && mId !== '';
+  });
+
+  const [forwardingMessage, setForwardingMessage] = useState(null);
+  const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
+  const [isCreateVoteOpen, setIsCreateVoteOpen] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [pendingCallType, setPendingCallType] = useState(null);
+
+  const handleCallClick = React.useCallback((type, skipCountdown = false, startTime = null) => {
+    if (currentConv?.type === 'GROUP' && !skipCountdown) {
+      setPendingCallType(type);
+      setCountdown(3);
+    } else {
+      let targetName = null;
+      let targetAvatar = null;
+      if (currentConv?.type === 'SINGLE') {
+        const other = currentConv.members?.find(m => {
+          const mid = m.userId || m.id;
+          return mid && String(mid).trim() !== String(user?.id || user?.userId).trim();
+        });
+        targetName = other?.fullName || other?.name || currentConv.name;
+        targetAvatar = other?.avatar || other?.avatarUrl;
+      }
+      onStartCall(type, { isJoin: skipCountdown, startTime, targetName, targetAvatar });
+    }
+  }, [currentConv, onStartCall, user]);
+
+
+  const onStartCallRef = useRef(onStartCall);
+  useEffect(() => {
+    onStartCallRef.current = onStartCall;
+  }, [onStartCall]);
+
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    } else if (countdown === 0 && pendingCallType) {
+      onStartCallRef.current(pendingCallType);
+      setPendingCallType(null);
+    }
+  }, [countdown, pendingCallType]);
+
+  useEffect(() => {
+    const handleStartCallAgain = (e) => {
+      const { type, isSingle, isOngoing, startTime, targetName, targetAvatar } = e.detail || {};
+      if (isSingle) {
+        onStartCall(type || 'audio', { targetName, targetAvatar });
+      } else {
+        const isGroupMode = currentConv?.type === 'GROUP';
+        if (isGroupMode) {
+          if (isOngoing) {
+            // Tham gia cuộc gọi nhóm đang diễn ra thì không cần đếm ngược
+            handleCallClick(type || 'audio', true, startTime);
+          } else {
+            // Gọi lại cuộc gọi nhóm đã kết thúc: Khởi tạo cuộc gọi mới (có đếm ngược)
+            handleCallClick(type || 'audio', false, null);
+          }
+        } else {
+          // Cuộc gọi 1-1: Khởi tạo cuộc gọi mới hoàn toàn
+          onStartCall(type || 'audio', { targetName, targetAvatar });
+        }
+      }
+    };
+    window.addEventListener('START_CALL_AGAIN', handleStartCallAgain);
+    return () => window.removeEventListener('START_CALL_AGAIN', handleStartCallAgain);
+  }, [onStartCall, handleCallClick, currentConv]);
+
+  useEffect(() => {
+    if (replyingTo) {
+      console.log('[DEBUG] Replying to set:', replyingTo);
+    }
+  }, [replyingTo]);
+  
+  const localOnRefresh = onRefreshMessages || fetchConversations;
+
+  const handleLoadMore = async () => {
+    if (!conversationId || !hasMoreHistoryRef.current) {
+      return { hasMoreHistory: false };
+    }
+
+    const result = await fetchMessages(conversationId, true);
+    if (result && typeof result.hasMoreHistory === 'boolean') {
+      hasMoreHistoryRef.current = result.hasMoreHistory;
+    }
+
+    return result;
+  };
+ 
+  useEffect(() => {
+    fetchFriends();
+  }, [fetchFriends]);
+
+  const formatLastSeen = (status, lastSeenAt) => {
+    if (status === 'ONLINE') return t('chat.online');
+    if (!lastSeenAt) return t('chat.offline');
+    const now = Date.now();
+    const diff = Math.floor((now - lastSeenAt) / 1000); // seconds
+    if (diff < 60) return t('chat.just_now');
+    if (diff < 3600) return t('chat.minutes_ago', { count: Math.floor(diff / 60) });
+    if (diff < 86400) return t('chat.hours_ago', { count: Math.floor(diff / 3600) });
+    return t('chat.days_ago', { count: Math.floor(diff / 86400) });
+  };
+
+  const getPinnedPreviewText = (pin) => {
+    if (!pin) return '';
+    const type = pin.type;
+    const content = pin.content || '';
+    const lower = content.trim().toLowerCase();
+
+    if (type === 'IMAGE' || lower === '[hình ảnh]') return `[${t('chat.image_preview', 'Hình ảnh')}]`;
+    if (type === 'VIDEO' || lower === '[video]') return `[${t('chat.video_preview', 'Video')}]`;
+    if (type === 'VOICE' || type === 'AUDIO' || lower === 'tin nhắn thoại' || lower === '[tin nhắn thoại]') return `[${t('chat.voice_message_preview', 'Tin nhắn thoại')}]`;
+    if (type === 'STICKER' || lower === '[nhãn dán]' || lower === '[sticker]') return `[${t('chat.sticker_preview', 'Nhãn dán')}]`;
+    if (lower === '[gif]') return '[GIF]';
+
+    if (type === 'FILE' || lower === '[tệp tin]' || lower === 'tệp tin' || lower === '[đính kèm]' || lower === 'đính kèm' || lower === '[file]' || lower === 'file' || lower === '[attachment]' || lower === 'attachment') {
+      if (lower === '[tệp tin]' || lower === 'tệp tin' || lower === '[đính kèm]' || lower === 'đính kèm' || lower === '[file]' || lower === 'file' || lower === '[attachment]' || lower === 'attachment') {
+        return t('chat.attachment_pin', '[Tệp đính kèm]');
+      }
+      return content || t('chat.attachment_pin', '[Tệp đính kèm]');
+    }
+
+    return content || t('chat.message', 'Tin nhắn');
+  };
+
+  const lastCallMsgRaw = (messages[conversationId] || [])?.filter(m => m.type === 'CALL_LOG').pop();
+  let lastCallMsg = null;
+  if (lastCallMsgRaw?.content) {
+    try {
+      lastCallMsg = JSON.parse(lastCallMsgRaw.content);
+    } catch (e) {
+      console.error("Failed to parse call log content", e);
+    }
+  }
+
+  const isOngoingInChat = lastCallMsg?.status === 'ONGOING' && (currentConv?.type === 'GROUP' || (conversationId && !String(conversationId).includes('SINGLE')));
+  const showOngoingBanner = isOngoingInChat && callStatus === 'idle';
+
+  const scrollToMessage = (messageId) => {
+    const element = document.getElementById(`msg-${messageId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Temporary highlight effect
+      element.classList.add('bg-indigo-50/50');
+      setTimeout(() => element.classList.remove('bg-indigo-50/50'), 2000);
+    }
+  };
+
+  useEffect(() => {
+    if (conversationId) {
+      hasMoreHistoryRef.current = true;
+      dispatch(setActiveConversation(conversationId));
+      dispatch(resetUnreadCount(conversationId));
+      
+      // Mark as read in backend
+      friendApi.markAsRead?.(conversationId).catch(() => {});
+      // Also try chatApi if it's the one responsible
+      chatApi.markConversationAsRead?.(conversationId).catch(() => {});
+
+      fetchMessages(conversationId).then((result) => {
+        if (result && typeof result.hasMoreHistory === 'boolean') {
+          hasMoreHistoryRef.current = result.hasMoreHistory;
+        }
+      });
+      setShowPinsDropdown(false); 
+
+      dispatch(setReplyingTo(null));
+    }
+
+    return () => {
+      dispatch(setActiveConversation(null));
+    };
+  }, [conversationId, fetchMessages, dispatch]);
+
+  const handleCreateVote = async (voteData) => {
+    try {
+      await chatApi.createVote(conversationId, voteData);
+      // Logic handle after create (socket will notify new message)
+    } catch (err) {
+      console.error("Failed to create vote:", err);
+      alert(t('chat.create_vote_error'));
+    }
+  };
+
+  // Logic for Stranger Bar
+  const friendEntry = Array.isArray(friends) && friends.find(f => {
+    const fId = String(f.userId || f.id || f.friendId || '').toLowerCase();
+    const mId = String(currentMember?.userId || currentMember?.id || '').toLowerCase();
+    return fId !== '' && fId === mId;
+  });
+  const friendStatus = friendEntry?.status;
+  const isRequester = Boolean(friendEntry?.isRequester);
+  const showStrangerBar = currentConv?.type === 'SINGLE' && !currentConv?.isAI && friendStatus !== 'ACCEPTED' && friendStatus !== 'BLOCKED';
+
+  return (
+    <div className="flex-1 flex flex-col h-full bg-background transition-colors overflow-hidden">
+      {/* ─── GROUP CALL COUNTDOWN OVERLAY ─── */}
+      {countdown > 0 && (
+        <div className="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="relative flex items-center justify-center">
+            {/* Vòng tròn loading */}
+            <svg className="w-48 h-48 animate-spin-slow" viewBox="0 0 100 100">
+              <circle
+                className="text-white/20 stroke-current"
+                strokeWidth="4"
+                cx="50" cy="50" r="45" fill="transparent"
+              />
+              <circle
+                className="text-indigo-500 stroke-current drop-shadow-[0_0_15px_rgba(99,102,241,0.8)]"
+                strokeWidth="4"
+                strokeLinecap="round"
+                cx="50" cy="50" r="45" fill="transparent"
+                strokeDasharray="282.7"
+                strokeDashoffset={282.7 - (282.7 * countdown) / 3}
+                style={{ transition: 'stroke-dashoffset 1s linear' }}
+              />
+            </svg>
+
+            {/* Số đếm ngược */}
+            <span className="absolute text-7xl font-black text-white drop-shadow-2xl">
+              {countdown}
+            </span>
+          </div>
+          <p className="mt-8 text-2xl font-bold text-white/90 animate-pulse">
+            {pendingCallType === 'audio' ? t('chat.countdown_voice') : t('chat.countdown_video')}
+          </p>
+          <button
+            onClick={() => {
+              setCountdown(0);
+              setPendingCallType(null);
+            }}
+            className="mt-8 px-8 py-3 rounded-full bg-white/10 hover:bg-red-500/80 text-white font-medium transition-all hover:scale-105 active:scale-95"
+          >
+            {t('chat.cancel')}
+          </button>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className={`
+        ${onBack ? 'h-20 px-4' : 'h-[88px] px-8'} 
+        glass-premium flex items-center justify-between z-30 sticky top-0 transition-all
+      `}>
+        <div className="flex items-center space-x-3">
+          {onBack && (
+            <button 
+              onClick={onBack}
+              className="p-2 -ml-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+            >
+              <ArrowLeft size={20} />
+            </button>
+          )}
+          
+          <div className="relative flex-shrink-0">
+            <GroupAvatar 
+              conversation={currentConv} 
+              size={onBack ? 'h-10 w-10' : 'h-14 w-14'} 
+            />
+            {(currentMember?.status === 'ONLINE' || currentConv?.isAI || conversationId?.includes('shop-expert-ai-bot')) && (
+              <div className={`absolute -bottom-0.5 -right-0.5 ${onBack ? 'w-3.5 h-3.5' : 'w-4.5 h-4.5'} rounded-full bg-background flex items-center justify-center`}>
+                <div className="w-full h-full rounded-full bg-emerald-500 status-glow shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+              </div>
+            )}
+          </div>
+          <div className="min-w-0">
+            <h2 className={`
+              ${onBack ? 'text-base' : 'text-xl'} 
+              font-bold text-foreground tracking-tighter leading-none mb-1.5 flex items-center space-x-1.5 truncate
+            `}>
+              <span className="truncate">
+                {currentConv?.type === 'SINGLE' 
+                  ? (currentMember?.fullName || currentMember?.name || currentConv?.name || t('sidebar.user_fallback'))
+                  : (currentConv?.name || t('sidebar.group_fallback'))}
+              </span>
+              {(currentConv?.isAI || conversationId?.includes('shop-expert-ai-bot')) ? (
+                <SparklesIcon size={onBack ? 14 : 16} className="text-indigo-500 animate-pulse" />
+              ) : (
+                <ShieldCheck size={onBack ? 14 : 16} className="text-cursor-accent flex-shrink-0" />
+              )}
+            </h2>
+            <div className="flex items-center space-x-2">
+              {currentConv?.type === 'GROUP' ? (
+                <span className="text-[11px] font-medium text-slate-400 flex items-center">
+                  <Users size={12} className="mr-1" />
+                  {t('chat.member_count', { count: currentConv.members?.length || 0 })}
+                </span>
+              ) : (
+                <span className={`text-[11px] font-medium ${currentMember?.status === 'ONLINE' ? 'text-emerald-500' : 'text-slate-400 dark:text-slate-500'}`}>
+                  {currentMember ? formatLastSeen(currentMember.status, currentMember.lastSeenAt) : t('chat.just_now')}
+                </span>
+              )}
+              <div className="w-px h-3 bg-border mx-1" />
+
+              {/* Classification Tag Indicator */}
+              <div className="relative">
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsTagMenuOpen(!isTagMenuOpen);
+                  }}
+                  className={`flex items-center space-x-1.5 px-2 py-0.5 rounded-lg transition-all hover:bg-surface-200 group ${
+                    currentConv?.tag ? 'bg-surface-100 shadow-sm border border-border/50' : 'text-slate-400'
+                  }`}
+                >
+                  <div
+                    className={`w-2 h-2 rounded-sm rotate-45 transition-transform group-hover:scale-110 ${
+                      currentConv?.tag 
+                        ? TAGS.find(t => t.key === currentConv.tag)?.color 
+                        : 'border border-slate-400 bg-transparent'
+                    }`}
+                    style={{ clipPath: 'polygon(0% 0%, 75% 0%, 100% 50%, 75% 100%, 0% 100%)' }}
+                  />
+                  <span className={`text-[9px] font-semibold uppercase tracking-wider ${currentConv?.tag ? TAGS.find(t => t.key === currentConv.tag)?.textColor : 'text-slate-400'}`}>
+                    {currentConv?.tag ? TAGS.find(t => t.key === currentConv.tag)?.label : t('chat.classify')}
+                  </span>
+                </button>
+
+                {isTagMenuOpen && (
+                  <div
+                    ref={tagMenuRef}
+                    className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-border dark:border-white/10 shadow-2xl rounded-2xl py-2 z-[100001] animate-in fade-in slide-in-from-top-4 duration-300"
+                  >
+                    <div className="px-5 py-3 mb-1 border-b border-border/40 dark:border-white/10 bg-surface-100 dark:bg-white/5 rounded-t-2xl">
+                      <p className="text-[11px] font-bold uppercase text-foreground/40 dark:text-white/50 tracking-widest text-center">{t('chat.classify_title')}</p>
+                    </div>
+                    {TAGS.map(tag => (
+                      <button
+                        key={tag.key}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            await chatApi.updateConversationTag(conversationId, tag.key);
+                            setIsTagMenuOpen(false);
+                            fetchConversations();
+                          } catch (err) {
+                            console.error("Failed to update tag", err);
+                          }
+                        }}
+                        className="w-full flex items-center space-x-4 px-5 py-3 hover:bg-foreground/5 dark:hover:bg-white/5 transition-all text-left group"
+                      >
+                        <div className={`w-4 h-4 ${tag.color} rounded-[4px] rotate-45 flex-shrink-0 shadow-sm transition-transform group-hover:scale-110`} style={{ clipPath: 'polygon(0% 0%, 75% 0%, 100% 50%, 75% 100%, 0% 100%)' }} />
+                        <span className={`text-[14px] font-bold ${currentConv?.tag === tag.key ? 'text-indigo-600' : 'text-foreground/70 dark:text-white/80'}`}>{tag.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-1 sm:space-x-2">
+          <button 
+            onClick={() => handleCallClick('video')}
+            className={cn(
+              "p-2.5 rounded-xl transition-all active:scale-95 group relative",
+              isDark ? "hover:bg-indigo-500/10 text-indigo-400" : "hover:bg-indigo-50 text-indigo-600"
+            )}
+          >
+            <Video size={20} />
+          </button>
+
+          <button 
+            onClick={() => handleCallClick('audio')}
+            className={cn(
+              "p-2.5 rounded-xl transition-all active:scale-95 group relative",
+              isDark ? "hover:bg-indigo-500/10 text-indigo-400" : "hover:bg-indigo-50 text-indigo-600"
+            )}
+          >
+            <Phone size={20} />
+          </button>
+
+          <div className={cn("w-px h-6 mx-1", isDark ? "bg-white/10" : "bg-slate-200")} />
+
+          <button 
+            onClick={onToggleInfo}
+            className={cn(
+              "p-2.5 rounded-xl transition-all active:scale-95",
+              isInfoOpen 
+                ? (isDark ? "bg-indigo-500/20 text-indigo-400" : "bg-indigo-50 text-indigo-600")
+                : (isDark ? "hover:bg-indigo-500/10 text-slate-400" : "hover:bg-indigo-50 text-slate-500")
+            )}
+          >
+            <PanelRight size={20} />
+          </button>
+        </div>
+      </div>
+
+      {showOngoingBanner && (
+        <div className={cn(
+          "mx-4 mt-3 mb-1 p-3 rounded-2xl flex items-center justify-between animate-in slide-in-from-top duration-500 z-20 shadow-sm border glass-premium",
+          isDark ? "bg-indigo-500/10 border-indigo-500/20" : "bg-indigo-500/5 border-indigo-500/10"
+        )}>
+          <div className="flex items-center space-x-3">
+            <div className="relative">
+              <div className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center shadow-sm",
+                isDark ? "bg-indigo-500/20" : "bg-indigo-500/10"
+              )}>
+                <Video size={20} className="text-indigo-500 fill-current" />
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full" />
+            </div>
+            <div>
+              <p className={cn("text-[14px] font-bold", isDark ? "text-white" : "text-slate-900")}>
+                {t('chat.ongoing_group_call')}
+              </p>
+              <p className={cn("text-[11px] font-medium", isDark ? "text-indigo-300" : "text-slate-600")}>
+                {t('chat.join_call_hint')}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => handleCallClick(lastCallMsg?.callType || 'video', true, lastCallMsg?.startTime)}
+
+            className={cn(
+              "px-5 py-2 text-[11px] font-black uppercase tracking-wider rounded-xl transition-all active:scale-95 border",
+              isDark 
+                ? "bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border-indigo-500/30" 
+                : "bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600 shadow-md shadow-indigo-600/10"
+            )}
+          >
+            {t('chat.join_now')}
+          </button>
+        </div>
+      )}
+
+
+
+
+      {/* Header */}
+      {currentConv?.pinnedMessages && currentConv.pinnedMessages.length > 0 && (
+        <div className={`relative z-20 ${isDark ? 'bg-[#1e2330]' : 'bg-[#f0f7ff]'} border-b ${isDark ? 'border-white/5' : 'border-[#d7e9fb]'} transition-all duration-500 ease-in-out overflow-hidden shadow-sm`}>
+          <div 
+            className="transition-all duration-500 ease-in-out relative"
+            style={{ 
+              maxHeight: showPinsDropdown ? '500px' : '48px',
+              minHeight: '48px'
+            }}
+          >
+            {/* Collapsed State - Always in DOM but fades out */}
+            <div 
+              className={cn(
+                "flex items-center justify-between px-4 sm:px-6 h-[48px] cursor-pointer transition-all duration-500 absolute inset-x-0 top-0 z-10",
+                isDark ? "hover:bg-white/5" : "hover:bg-[#e1efff]",
+                showPinsDropdown ? "opacity-0 -translate-y-4 pointer-events-none" : "opacity-100 translate-y-0"
+              )}
+              onClick={() => setShowPinsDropdown(true)}
+            >
+              <div className="flex items-center space-x-3 overflow-hidden">
+                <div className={isDark ? "text-blue-400" : "text-[#0068ff]"}>
+                  <MessageCircle size={18} />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className={`text-[10px] font-bold uppercase leading-none mb-0.5 ${isDark ? 'text-white/40' : 'text-slate-500'}`}>{t('chat.message')}</span>
+                  <p className={`text-[13px] font-medium truncate leading-tight ${isDark ? 'text-white/90' : 'text-slate-900'}`}>
+                    {(() => {
+                      const lastPin = currentConv.pinnedMessages[currentConv.pinnedMessages.length - 1];
+                      const sender = lastPin.senderName || t('chat.member');
+                      return (
+                        <>
+                          <span className="font-bold">{sender}:</span> {getPinnedPreviewText(lastPin)}
+                        </>
+                      );
+                    })()}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-2 ml-4">
+                {currentConv.pinnedMessages.length > 1 && (
+                  <div className={`flex items-center space-x-1 px-2 py-1 rounded-md border transition-colors ${isDark ? 'bg-white/10 border-white/10 hover:bg-white/20' : 'bg-slate-200/50 border-slate-300/30 hover:bg-slate-200'}`}>
+                    <span className={`text-[11px] font-bold ${isDark ? 'text-white/80' : 'text-slate-600'}`}>+{currentConv.pinnedMessages.length - 1} {t('chat.ghim')}</span>
+                    <ChevronDown size={12} className={isDark ? 'text-white/40' : 'text-slate-400'} />
+                  </div>
+                )}
+                <button className={`p-1.5 transition-colors ${isDark ? 'text-white/40 hover:text-white' : 'text-slate-400 hover:text-[#0068ff]'}`}>
+                  <MoreHorizontal size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Expanded State - Slides and fades in */}
+            <div className={cn(
+              "flex flex-col transition-all duration-500 ease-in-out",
+              showPinsDropdown ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
+            )}>
+              {/* Header */}
+              <div className={`flex items-center justify-between px-4 sm:px-6 py-2 border-b shrink-0 ${isDark ? 'border-white/5 bg-white/5' : 'border-[#d7e9fb] bg-[#e1efff]'}`}>
+                <span className={`text-[11px] font-bold uppercase tracking-wide ${isDark ? 'text-white/40' : 'text-slate-600'}`}>
+                  {t('chat.pinned_list', { count: currentConv.pinnedMessages.length })}
+                </span>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowPinsDropdown(false);
+                  }}
+                  className={`flex items-center space-x-1 text-[11px] font-bold transition-colors uppercase ${isDark ? 'text-white/40 hover:text-white' : 'text-[#0068ff] hover:text-blue-700'}`}
+                >
+                  <span>{t('chat.collapse')}</span>
+                  <ChevronUp size={14} />
+                </button>
+              </div>
+              
+              {/* List */}
+              <div className={`max-h-64 overflow-y-auto no-scrollbar ${isDark ? 'bg-[#0b0e14]' : 'bg-white'}`}>
+                {currentConv.pinnedMessages.slice().reverse().map((pin) => (
+                  <div 
+                    key={pin.messageId}
+                    onClick={() => scrollToMessage(pin.messageId)}
+                    className={`flex items-center justify-between px-4 sm:px-6 py-3 cursor-pointer border-b last:border-0 group transition-colors ${isDark ? 'hover:bg-white/5 border-white/5' : 'hover:bg-[#f0f7ff] border-slate-100'}`}
+                  >
+                    <div className="flex items-center space-x-3 overflow-hidden">
+                      <div className={isDark ? 'text-blue-400' : 'text-[#0068ff]'}>
+                        <MessageCircle size={18} />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className={`text-[10px] font-bold uppercase leading-none mb-0.5 ${isDark ? 'text-white/40' : 'text-slate-400'}`}>{t('chat.message')}</span>
+                        <p className={`text-[13px] font-medium truncate leading-tight ${isDark ? 'text-white/90' : 'text-slate-800'}`}>
+                          <span className="font-bold">{pin.senderName}:</span> {getPinnedPreviewText(pin)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button 
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await chatApi.unpinMessage(conversationId, pin.messageId);
+                          fetchConversations();
+                        }}
+                        className={`p-1.5 opacity-0 group-hover:opacity-100 transition-all hover:text-red-500 ${isDark ? 'text-white/20' : 'text-slate-300'}`}
+                        title={t('chat.unpin')}
+                      >
+                        <X size={16} />
+                      </button>
+                      <button className={`p-1.5 transition-all ${isDark ? 'text-white/20 hover:text-white' : 'text-slate-300 hover:text-slate-600'}`}>
+                        <MoreHorizontal size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Footer */}
+              <div className={`flex justify-center p-2 border-t shrink-0 ${isDark ? 'border-white/5 bg-white/5' : 'border-[#d7e9fb] bg-[#e1efff]'}`}>
+                <button className={`text-[11px] font-bold transition-all flex items-center space-x-1 uppercase ${isDark ? 'text-white/40 hover:text-white' : 'text-[#0068ff] hover:text-blue-700'}`}>
+                  <span>{t('chat.view_all_pins')}</span>
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Friend Bar for Strangers */}
+      {showStrangerBar && (
+        <div className={`relative z-10 ${isDark ? 'bg-[#1a1e26] border-white/5' : 'bg-slate-50 border-slate-200'} border-b px-4 sm:px-6 py-2.5 flex items-center justify-between transition-colors`}>
+          <div className="flex items-center space-x-3 text-slate-500 dark:text-slate-400">
+            <UserPlus size={18} className="flex-shrink-0" />
+            <span className="text-[13px] font-medium">
+              {friendStatus === 'PENDING'
+                ? (isRequester ? t('chat.friend_request_sent') : t('chat.friend_request_received'))
+                : t('chat.send_friend_request_prompt')}
+            </span>
+          </div>
+          <div className="flex items-center space-x-2">
+            {friendStatus === 'PENDING' ? (
+              isRequester ? (
+                <button
+                  onClick={async () => {
+                    try {
+                      await friendApi.cancelRequest(currentMember.userId || currentMember.id);
+                      dispatch(updateFriendStatus({
+                        userId: currentMember.userId || currentMember.id,
+                        status: 'NONE',
+                        isRequester: null
+                      }));
+                      fetchFriends();
+                    } catch (err) {
+                      console.error("Failed to cancel friend request", err);
+                    }
+                  }}
+                  className="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white text-[12px] font-bold rounded-lg transition-all shadow-sm"
+                >
+                  {t('chat.cancel_request')}
+                </button>
+              ) : null
+            ) : (
+              <button 
+                onClick={async () => {
+                  try {
+                    const targetUserId = currentMember.userId || currentMember.id;
+                    await friendApi.sendRequest(targetUserId);
+                    const myId = user?.userId || user?.id;
+                    if (myId && targetUserId) {
+                      try {
+                        await notificationApi.createNotification({
+                          senderId: myId,
+                          receiverId: targetUserId,
+                          type: 'FRIEND_REQUEST',
+                          message: `${user?.fullName || user?.phoneNumber || t('chat.someone')} ${t('chat.friend_request_notif')}`
+                        });
+                      } catch (e) {
+                        console.warn('Failed to create FRIEND_REQUEST notification', e);
+                      }
+                    }
+                    dispatch(updateFriendStatus({
+                      userId: targetUserId,
+                      status: 'PENDING',
+                      isRequester: true
+                    }));
+                    fetchFriends();
+                  } catch (err) {
+                    console.error("Failed to send friend request", err);
+                  }
+                }}
+                className="px-4 py-1.5 bg-[#0068ff] hover:bg-blue-700 text-white text-[12px] font-bold rounded-lg transition-all shadow-sm"
+              >
+                {t('chat.add_friend_btn')}
+              </button>
+            )}
+            <div className="relative" ref={strangerMenuRef}>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowStrangerMenu(!showStrangerMenu);
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"
+              >
+                <MoreHorizontal size={18} />
+              </button>
+
+              {showStrangerMenu && (
+                <div className={`absolute top-full right-0 mt-2 w-48 border shadow-2xl rounded-xl py-2 z-[100] animate-in fade-in zoom-in-95 duration-200 ${isDark ? 'bg-slate-900 border-white/10' : 'bg-white border-slate-200'}`}>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        await friendApi.blockUser(currentMember.userId || currentMember.id);
+                        setShowStrangerMenu(false);
+                        fetchFriends();
+                        fetchConversations();
+                      } catch (err) {
+                        console.error("Failed to block user", err);
+                      }
+                    }}
+                    className="w-full flex items-center px-4 py-2 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left group"
+                  >
+                    <Ban size={16} className="text-red-500 mr-3" />
+                    <span className="text-[13px] font-bold text-red-500">{t('chat.block_user')}</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      alert(t('chat.report_not_implemented'));
+                      setShowStrangerMenu(false);
+                    }}
+                    className={`w-full flex items-center px-4 py-2 hover:bg-foreground/5 dark:hover:bg-white/5 transition-colors text-left group ${isDark ? 'text-white' : 'text-slate-700'}`}
+                  >
+                    <AlertCircle size={16} className="text-slate-400 mr-3" />
+                    <span className="text-[13px] font-bold">{t('chat.report')}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Messages Area */}
+      <div className="flex-1 flex flex-col min-h-0 relative">
+        <MessageList
+          conversations={conversations}
+          conversationId={conversationId}
+          messages={messages[conversationId] || []}
+          loading={messagesLoading}
+          onRefresh={localOnRefresh}
+          onLoadMore={handleLoadMore}
+          onReply={(msg) => dispatch(setReplyingTo(msg))}
+          onScrollToMessage={scrollToMessage}
+          onForward={(msg) => {
+            setForwardingMessage(msg);
+            setIsForwardModalOpen(true);
+          }}
+          onStartCall={onStartCall}
+          openLightbox={openLightbox}
+          allChatImages={allChatImages}
+        />
+      </div>
+
+      {/* Input Area */}
+      <div className="p-4 sm:p-6 bg-sidebar border-t border-border transition-colors relative z-50">
+        <MessageInput 
+          conversationId={conversationId} 
+          replyingTo={replyingTo}
+          onCancelReply={() => dispatch(setReplyingTo(null))}
+          onScrollToMessage={scrollToMessage}
+          onOpenVoteModal={() => setIsCreateVoteOpen(true)}
+        />
+      </div>
+
+      {/* Forward Modal */}
+      <ForwardModal 
+        isOpen={isForwardModalOpen}
+        onClose={() => {
+          setIsForwardModalOpen(false);
+          setForwardingMessage(null);
+        }}
+        messageToForward={forwardingMessage}
+      />
+
+      <CreateVoteModal 
+        isOpen={isCreateVoteOpen}
+        onClose={() => setIsCreateVoteOpen(false)}
+        onCreate={handleCreateVote}
+      />
+    </div>
+  );
+};
+
+export default ChatWindow;

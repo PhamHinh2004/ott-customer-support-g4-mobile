@@ -1,0 +1,205 @@
+server:
+  address: 0.0.0.0
+  port: 8080
+  servlet:
+    context-path: /
+  compression:
+    enabled: true
+    min-response-size: 1024
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+  application:
+    name: chat-app
+  profiles:
+    active: dev
+
+  ai:
+    google:
+      genai:
+        api-key: ${GEMINI_API_KEY:}
+        chat:
+          options:
+            model: gemini-2.5-flash
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
+          max-wait: 1000ms
+  # Security
+  security:
+    user:
+      name: admin
+      password: admin123
+
+  # Jackson
+  jackson:
+    serialization:
+      write-dates-as-timestamps: true
+    deserialization:
+      fail-on-unknown-properties: false
+
+  # Mail / SMTP
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: 20102004hinh@gmail.com
+    password: ekvsgwrigrwecsgp
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+# JWT Configuration
+jwt:
+  secret: c8e09fddda9e192d16c485affabc61c9f4bca77a60c19d448f3a6e8475b9f0a4e0d1f69bca8d21f1123b8f0f8a0b8d12
+  expiration: 86400000  # 24 hours in milliseconds
+  refresh-expiration: 604800000  # 7 days
+
+# AWS Configuration
+aws:
+  region: ${AWS_REGION:ap-southeast-1}
+  accessKey: ${AWS_ACCESS_KEY_ID:dummy}
+  secretKey: ${AWS_SECRET_ACCESS_KEY:dummy}
+
+# DynamoDB Configuration
+aws.dynamodb:
+  endpoint: ${DYNAMODB_ENDPOINT:}
+  tables:
+    users: chat_users
+    conversations: chat_conversations
+    messages: chat_messages
+    otp: chat_otp
+    sessions: chat_sessions
+    stories: chat_stories
+    contacts: chat_contacts
+    devices: chat_devices
+    invitations: chat_group_invitations
+
+# S3 Configuration
+aws.s3:
+  bucket: ${AWS_S3_BUCKET:amzn-s3-ott-n4}
+  region: ${AWS_REGION:ap-southeast-1}
+  max-file-size: 104857600  # 100MB
+
+# CORS Configuration
+cors:
+  allowed-origin-patterns:
+    - "http://localhost:*"
+    - "http://192.168.1.*:*"
+    - "http://172.*.*.*:*"
+    - "http://10.*.*.*:*"
+    - "http://*.local:*"
+    - "https://*.f5chat.online"
+    - "https://f5chat.online"
+  allowed-methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - PATCH
+    - OPTIONS
+  allowed-headers:
+    - Content-Type
+    - Authorization
+    - X-Session-Id
+    - X-User-Id
+    - X-Device-Id
+  credentials: true
+  max-age: 3600
+
+# Firebase Configuration
+firebase:
+  config-path: ${FIREBASE_CONFIG_PATH:}
+  database-url: ${FIREBASE_DATABASE_URL:}
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.chatapp: DEBUG
+    org.springframework.security: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/chat-app.log
+
+# Actuator & Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  metrics:
+    export:
+      prometheus:
+        enabled: false
+      defaults:
+        enabled: false
+
+# Application Custom Settings
+app:
+  security:
+    max-login-attempts: 5
+    lockout-duration-minutes: 5
+  pagination:
+    default-page-size: 20
+    max-page-size: 100
+  file-upload:
+    max-size: 104857600  # 100MB
+    allowed-types:
+      - jpg
+      - jpeg
+      - png
+      - gif
+      - mp4
+      - pdf
+      - doc
+      - docx
+  cache:
+    translation-ttl: 86400      # 24h - bản dịch ít thay đổi
+    message-ttl: 300            # 5 phút - message page gần đây
+    conversation-ttl: 60        # 1 phút - metadata conversation
+  translation:
+    service-url: ${APP_WHISPER_URL:http://localhost:8000}
+    batch-size: 32
+  whisper:
+    url: ${APP_WHISPER_URL:http://localhost:8000}/transcribe
+# Swagger/OpenAPI
+springdoc:
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
+# Twilio SMS Configuration
+twilio:
+  account-sid: ${TWILIO_ACCOUNT_SID:dummy_sid}
+  auth-token: ${TWILIO_AUTH_TOKEN:dummy_token}
+  from-number: ${TWILIO_FROM_NUMBER:dummy_number}
+
+# Agora Configuration (Video Call)
+agora:
+  app-id: ${AGORA_APP_ID:71fffdd590e54202bc1ea70e751324ce}
+  app-certificate: ${AGORA_APP_CERTIFICATE:}
+  token-expiry-seconds: ${AGORA_TOKEN_EXPIRY_SECONDS:3600}
+
+# Trigger AWS EC2 Deployment

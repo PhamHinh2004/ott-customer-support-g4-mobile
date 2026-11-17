@@ -1,0 +1,1126 @@
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  Animated,
+  Modal,
+  ScrollView,
+  PanResponder,
+  Linking,
+  ActivityIndicator,
+} from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { useSelector, useDispatch } from 'react-redux';
+import { useRouter } from 'expo-router';
+import { MaterialIcons, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import CONFIG from '../config';
+import { setReplyingTo } from '../store/chatSlice';
+import { openFile } from '../utils/fileUtils';
+import * as FileSystem from 'expo-file-system/legacy';
+import MediaViewer from './MediaViewer';
+import VideoThumbnail from './VideoThumbnail';
+import FileViewerModal from './FileViewerModal';
+import VoicePlayer from './common/VoicePlayer';
+import VoteMessage from './VoteMessage';
+import VoteDetailsModal from './VoteDetailsModal';
+import { useTheme } from '../context/ThemeContext';
+import UserActionModal from './common/UserActionModal';
+import { translateSystemMessage } from '../utils/systemMessageTranslator';
+
+
+const ChatBubble = ({
+  message,
+  isOwn: initialIsOwn,
+  isOnline = false,
+  latestReadBy = [],
+  showReadStatus = true,
+  onReact,
+  onLongPress,
+  onPressMessage,
+  isHighlighted = false,
+  allMessages = [],
+  members = [],
+  translatedMessages = {},
+  translationLoading = {},
+  onTranslate
+}) => {
+  const { t } = useTranslation();
+
+  const { colors, isDark } = useTheme();
+  const router = useRouter();
+  const dispatch = useDispatch();
+  const { user } = useSelector(state => state.auth);
+  const conversations = useSelector(state => state.chat.conversations);
+  const BASE_URL = CONFIG.BASE_URL;
+
+
+  const highlightAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isHighlighted) {
+      Animated.sequence([
+        Animated.timing(highlightAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: false,
+        }),
+        Animated.timing(highlightAnim, {
+          toValue: 0,
+          duration: 1200,
+          useNativeDriver: false,
+        }),
+      ]).start();
+    }
+  }, [isHighlighted]);
+
+  const highlightBorder = highlightAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['transparent', colors.primary],
+  });
+
+  const currentUserIdStr = String(user?.userId || user?.id || '');
+
+  const [mediaViewerVisible, setMediaViewerVisible] = useState(false);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
+  const [fileExists, setFileExists] = useState(false);
+  const [fileViewerVisible, setFileViewerVisible] = useState(false);
+  const [selectedFile, setSelectedFile] = useState({ url: '', name: '' });
+  const isOwn = initialIsOwn || (currentUserIdStr !== '' && String(message.senderId || '') === currentUserIdStr);
+  const [reactionModalVisible, setReactionModalVisible] = useState(false);
+  const [selectedReactionEmoji, setSelectedReactionEmoji] = useState('');
+
+  const [voteDetailsVisible, setVoteDetailsVisible] = useState(false);
+  const [selectedVoteData, setSelectedVoteData] = useState(null);
+
+  const [userActionVisible, setUserActionVisible] = useState(false);
+  const [selectedUserForAction, setSelectedUserForAction] = useState(null);
+
+
+  useEffect(() => {
+    if (message.type === 'FILE') {
+      const mediaUrls = message.mediaUrls || message.media_urls || [];
+      const url = mediaUrls[0];
+      if (url) {
+        const fileName = url.split('/').pop();
+        if (fileName) {
+          const fileUri = FileSystem.cacheDirectory + fileName;
+          FileSystem.getInfoAsync(fileUri).then(info => {
+            setFileExists(info.exists);
+          }).catch(() => setFileExists(false));
+        }
+      }
+    }
+  }, [message]);
+
+  const openReactionDetail = (emoji) => {
+    setSelectedReactionEmoji(emoji);
+    setReactionModalVisible(true);
+  };
+  const closeReactionDetail = () => setReactionModalVisible(false);
+
+  const getReactionUserName = (userId) => {
+    const id = String(userId || '');
+    if (!id) return t('common.user');
+    if (id === currentUserIdStr) return t('common.you');
+    const found = conversations
+      .flatMap(conv => conv.members || conv.participants || [])
+      .find(member => String(member.userId || member.id || '') === id);
+    return found?.fullName || found?.name || found?.username || t('common.user');
+  };
+
+  const translateX = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 10,
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dx < 0) {
+          const limitedDx = Math.max(gestureState.dx, -30);
+          translateX.setValue(limitedDx);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx < -10) dispatch(setReplyingTo(message));
+        Animated.spring(translateX, { toValue: 0, useNativeDriver: true, tension: 100, friction: 8 }).start();
+      },
+      onPanResponderTerminate: () => Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start()
+    })
+  ).current;
+
+  const getAvatarUrl = (url, name) => {
+    if (!url) return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'U')}&background=random&color=fff&size=128&bold=true`;
+    if (typeof url !== 'string') return url;
+    if (url.startsWith('http')) return url;
+    return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+  };
+
+  const getFullUrl = (url) => {
+    if (!url || typeof url !== 'string') return '';
+    if (url.startsWith('http') || url.startsWith('file://') || url.startsWith('blob:') || url.startsWith('data:')) return url;
+    return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+  };
+
+  const senderInfo = useMemo(() => {
+    if (isOwn) return null;
+    const msgSenderId = String(message.senderId || '');
+    for (const conv of conversations) {
+      const members = conv.members || conv.participants || [];
+      const found = members.find(m => String(m.userId || m.id || '') === msgSenderId);
+      if (found) return found;
+    }
+    return null;
+  }, [conversations, message.senderId, isOwn]);
+
+  const avatarUrl = getAvatarUrl(
+    senderInfo?.avatarUrl || senderInfo?.avatar || senderInfo?.profilePic || message.senderAvatar,
+    senderInfo?.fullName || senderInfo?.name || message.senderName
+  );
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    try {
+      const date = new Date(timestamp);
+      return isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return ''; }
+  };
+
+  const mediaFiles = message.mediaUrls || message.media_urls || [];
+  const firstMedia = mediaFiles[0];
+  const isVoice = message.type === 'VOICE' ||
+    (message.content && message.content.match(/\.(webm|m4a|mp3|wav|ogg|opus)(\?|$)/i)) ||
+    (firstMedia && String(firstMedia).match(/\.(webm|m4a|mp3|wav|ogg|opus)(\?|$)/i));
+
+  const isVideoUrl = (url) => {
+    if (!url || typeof url !== 'string') return false;
+    return url.toLowerCase().match(/\.(mp4|webm|ogg|mov|qt|mkv)(\?|$)/i);
+  };
+
+  const isImageUrl = (url) => {
+    if (!url || typeof url !== 'string') return false;
+    return url.toLowerCase().match(/\.(jpeg|jpg|gif|png|webp|heic|svg)(\?|$)/i);
+  };
+
+  const isImageOrVideoUrl = (url) => {
+    return isImageUrl(url) || isVideoUrl(url);
+  };
+
+  const imagesAndVideos = useMemo(() => {
+    if (message.type === 'VOICE' || message.isRecalled) return [];
+    return mediaFiles.filter(url => 
+      isImageOrVideoUrl(url) || message.type === 'IMAGE' || message.type === 'VIDEO'
+    );
+  }, [mediaFiles, message.type, message.isRecalled]);
+
+  const otherFiles = useMemo(() => {
+    if (message.type === 'VOICE' || message.isRecalled) return [];
+    return mediaFiles.filter(url => !imagesAndVideos.includes(url));
+  }, [mediaFiles, imagesAndVideos, message.type, message.isRecalled]);
+
+  const reactionUserNamesFor = (emoji) => {
+    if (!message.reactions || !message.reactions[emoji]) return [];
+    return message.reactions[emoji].map(getReactionUserName);
+  };
+
+  const renderReactions = () => {
+    if (!message.reactions || Object.keys(message.reactions).length === 0) return null;
+    return (
+      <View style={[styles.reactionsContainer, isOwn ? styles.ownReactions : styles.otherReactions]}>
+        {Object.entries(message.reactions).map(([emoji, users]) => {
+          if (!Array.isArray(users) || users.length === 0) return null;
+          return (
+            <TouchableOpacity key={emoji} style={[styles.reactionBadge, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.75} onPress={() => openReactionDetail(emoji)}>
+              <Text style={styles.reactionEmoji}>{emoji}</Text>
+              <Text style={[styles.reactionCount, { color: colors.textMuted }]}>{users.length > 1 ? users.length : ''}</Text>
+            </TouchableOpacity>
+
+          );
+        })}
+      </View>
+    );
+  };
+
+  const renderReadReceipts = () => {
+    if (!isOwn) return null;
+    const readSource = Array.isArray(latestReadBy) && latestReadBy.length > 0 ? latestReadBy : [];
+    if (readSource.length === 0) return null;
+    const mapReader = (reader) => {
+      if (reader && typeof reader === 'object') {
+        return {
+          id: String(reader.userId || reader.id || ''),
+          avatarUrl: reader.avatarUrl || reader.avatar || null,
+          name: reader.fullName || reader.name || reader.username || null,
+        };
+      }
+      return { id: String(reader || ''), avatarUrl: null, name: null };
+    };
+    const msgSenderId = String(message.senderId || '');
+    const readers = readSource.map(mapReader).filter((reader) => reader.id && reader.id !== msgSenderId).reduce((unique, reader) => {
+      if (!unique.some((r) => r.id === reader.id)) unique.push(reader);
+      return unique;
+    }, []);
+    if (readers.length === 0) return null;
+    return (
+      <View style={styles.readReceiptsContainer}>
+        {readers.slice(0, 3).map((reader, index) => {
+          let readerAvatar = reader.avatarUrl;
+          if (!readerAvatar) {
+            for (const conv of conversations) {
+              const found = (conv.members || []).find(m => String(m.userId || m.id || '') === reader.id);
+              if (found) { readerAvatar = getAvatarUrl(found.avatarUrl || found.avatar, found.fullName || found.name); break; }
+            }
+          }
+          return (
+            <Image key={`read-${reader.id}-${index}`} source={{ uri: readerAvatar || `https://ui-avatars.com/api/?name=U&background=ccc` }} style={[styles.readAvatar, { marginLeft: index > 0 ? -6 : 0, zIndex: 10 - index }]} />
+          );
+        })}
+        {readers.length > 3 && (
+          <View style={styles.moreReadersBadge}><Text style={styles.moreReadersText}>+{readers.length - 3}</Text></View>
+        )}
+      </View>
+    );
+  };
+
+  const renderDeliveryStatus = () => {
+    if (!isOwn || !showReadStatus) return null;
+    const users = Array.isArray(latestReadBy) ? latestReadBy : [];
+    const hasReadByOther = users.some((reader) => {
+      const id = reader && typeof reader === 'object' ? String(reader.userId || reader.id || '') : String(reader || '');
+      return id && id !== currentUserIdStr;
+    });
+    if (hasReadByOther) return null;
+    const statusText = !isOnline ? t('chat.sent') : t('chat.received');
+    const iconName = !isOnline ? 'check' : 'check-circle';
+    const iconColor = !isOnline ? colors.textMuted : colors.primary;
+    return (
+      <View style={styles.deliveryStatus}>
+        <MaterialIcons name={iconName} size={12} color={iconColor} />
+        <Text style={[styles.deliveryStatusText, { color: iconColor }]}>{statusText}</Text>
+      </View>
+    );
+  };
+
+  const handleOpenVoteDetails = (vote) => {
+    setSelectedVoteData(vote);
+    setVoteDetailsVisible(true);
+  };
+
+  const renderVoteContent = () => {
+    if (message.type !== 'VOTE' || !message.vote) return null;
+
+    // Tìm conversation hiện tại để check quyền admin
+    const currentConv = conversations.find(c => String(c.conversationId) === String(message.conversationId));
+    const meId = currentUserIdStr;
+
+    const myRole = currentConv?.members?.find(m => String(m.userId || m.id) === meId)?.role;
+    const isAdmin = myRole === 'ADMIN' || myRole === 'OWNER';
+
+    return (
+      <VoteMessage
+        message={message}
+        currentUserId={meId}
+        isMe={isOwn}
+        isAdmin={isAdmin}
+        onVote={(msgId, optId, mult, sel) => {
+          onPressMessage?.({ action: 'VOTE', messageId: msgId, optionId: optId, allowMultiple: mult, currentSelection: sel });
+        }}
+        onCloseVote={(msgId) => {
+          onPressMessage?.({ action: 'CLOSE_VOTE', messageId: msgId });
+        }}
+        onViewDetails={handleOpenVoteDetails}
+      />
+    );
+  };
+  const handleMentionPress = (fullName) => {
+    // Tìm member từ fullName
+    const member = members.find(m => (m.fullName || m.name) === fullName);
+    if (member) {
+      setSelectedUserForAction({
+        ...member,
+        userId: member.userId || member.id,
+        fullName: member.fullName || member.name,
+      });
+      setUserActionVisible(true);
+    }
+  };
+
+  const renderTextWithLinks = (textVal) => {
+    if (!textVal) return [];
+    const urlRegex = /(https?:\/\/[^\s]+)/gi;
+    const parts = textVal.split(urlRegex);
+    return parts.map((part, index) => {
+      if (part.match(urlRegex)) {
+        return (
+          <Text
+            key={`link-${index}`}
+            style={{ textDecorationLine: 'underline', color: isOwn ? '#fff' : colors.primary }}
+            onPress={() => Linking.openURL(part)}
+          >
+            {part}
+          </Text>
+        );
+      }
+      return part;
+    });
+  };
+
+  const renderTextWithMentions = (content) => {
+    if (!content) return null;
+    if (members.length === 0) {
+      return (
+        <Text style={[styles.text, isOwn ? styles.ownText : [styles.otherText, { color: colors.foreground }]]}>
+          {renderTextWithLinks(content)}
+        </Text>
+      );
+    }
+
+    const currentConv = conversations.find(c => String(c.conversationId) === String(message.conversationId));
+    const isGroup = currentConv?.type === 'GROUP';
+
+    if (!isGroup) {
+      return (
+        <Text style={[styles.text, isOwn ? styles.ownText : [styles.otherText, { color: colors.foreground }]]}>
+          {renderTextWithLinks(content)}
+        </Text>
+      );
+    }
+
+    // Tạo regex từ danh sách tên thành viên
+    const sortedMembers = [...members]
+      .filter(m => (m.fullName || m.name))
+      .sort((a, b) => (b.fullName || b.name).length - (a.fullName || a.name).length);
+
+    if (sortedMembers.length === 0 && !content.includes('@All')) {
+      return (
+        <Text style={[styles.text, isOwn ? styles.ownText : [styles.otherText, { color: colors.foreground }]]}>
+          {renderTextWithLinks(content)}
+        </Text>
+      );
+    }
+
+    const memberNames = sortedMembers.map(m => (m.fullName || m.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const names = [...memberNames, 'All'].join('|');
+    const regex = new RegExp(`@(${names})`, 'g');
+
+
+    const parts = content.split(regex);
+    const result = [];
+
+    // Split sẽ trả về mảng: [text_before, matched_name, text_after, matched_name, ...]
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (i % 2 === 1) {
+        // Đây là phần khớp với tên (vì dùng ngoặc tròn trong regex nên split giữ lại phần khớp)
+        result.push(
+          <Text
+            key={i}
+            style={[
+              styles.mentionText,
+              { color: isOwn ? '#fff' : colors.primary }
+            ]}
+            onPress={() => part !== 'All' && handleMentionPress(part)}
+          >
+            @{part}
+          </Text>
+
+        );
+      } else if (part) {
+        result.push(...renderTextWithLinks(part));
+      }
+    }
+
+    return (
+      <Text style={[styles.text, isOwn ? styles.ownText : [styles.otherText, { color: colors.foreground }], (message.mediaUrls?.length > 0) && { marginTop: 8 }]}>
+        {result}
+      </Text>
+    );
+  };
+
+  if (message.type === 'SYSTEM' || String(message.senderId) === 'SYSTEM') {
+    return (
+      <View style={styles.systemMessageContainer}>
+        <View style={[styles.systemMessageWrapper, { backgroundColor: isDark ? colors.surface200 : 'rgba(0, 0, 0, 0.05)' }]}>
+          <View style={[styles.systemDot, { backgroundColor: colors.primary }]} />
+          <Text style={[styles.systemMessageText, { color: colors.textMuted }]}>{translateSystemMessage(message.content, t)?.toUpperCase() || 'THÔNG BÁO HỆ THỐNG'}</Text>
+          <View style={[styles.systemDot, { backgroundColor: colors.primary }]} />
+        </View>
+      </View>
+    );
+  }
+
+  const handleAvatarPress = () => {
+    const currentConv = conversations.find(c => String(c.conversationId) === String(message.conversationId));
+    const isGroup = currentConv?.type === 'GROUP';
+
+    if (isGroup) {
+      const targetUser = senderInfo || {
+        userId: message.senderId,
+        id: message.senderId,
+        fullName: message.senderName || 'Người dùng',
+        name: message.senderName || 'Người dùng',
+        avatarUrl: message.senderAvatar,
+      };
+      setSelectedUserForAction({
+        ...targetUser,
+        userId: targetUser.userId || targetUser.id,
+        fullName: targetUser.fullName || targetUser.name,
+      });
+      setUserActionVisible(true);
+    } else {
+      router.push(`/chat-info/${encodeURIComponent(message.conversationId)}`);
+    }
+  };
+
+  return (
+    <Animated.View {...panResponder.panHandlers} style={[styles.container, isOwn ? styles.ownContainer : styles.otherContainer, { transform: [{ translateX }] }]}>
+      {!isOwn && (
+        <TouchableOpacity style={styles.avatarContainer} onPress={handleAvatarPress}>
+          {message.senderId === 'shop-expert-ai-bot' ? (
+            <View style={[styles.avatar, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(99, 102, 241, 0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border }]}>
+              <Ionicons name="sparkles" size={14} color="#6366f1" />
+            </View>
+          ) : (
+            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+          )}
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity activeOpacity={message.isRecalled ? 1 : 0.8} onPress={() => !message.isRecalled && onPressMessage?.(message)} onLongPress={() => !message.isRecalled && onLongPress?.()} style={[styles.messageWrapper, isOwn ? styles.ownWrapper : styles.otherWrapper]}>
+        {!isOwn && <Text style={[styles.senderName, { color: colors.textMuted }]}>{senderInfo?.fullName || senderInfo?.name || message.senderName || 'User'}</Text>}
+
+        <View style={[styles.bubbleContainer, isOwn ? { alignSelf: 'flex-end' } : { alignSelf: 'flex-start' }]}>
+          <Animated.View style={[
+            styles.bubble,
+            message.type === 'STICKER'
+              ? { backgroundColor: 'transparent', paddingVertical: 0, paddingHorizontal: 0 }
+              : (isOwn ? [styles.ownBubble, { backgroundColor: colors.primary }] : [styles.otherBubble, { backgroundColor: colors.surface200 }]),
+            isVoice && { paddingVertical: 6, paddingHorizontal: 10 },
+            { borderColor: highlightBorder, borderWidth: 2 }
+          ]}>
+
+            {message.type === 'STICKER' ? (
+              (() => {
+                const stickerUrl = message.content || (message.mediaUrls && message.mediaUrls[0]) || '';
+                return (
+                  <View style={styles.stickerBubbleContainer}>
+                    <Image source={{ uri: getFullUrl(stickerUrl) }} style={styles.bubbleStickerImage} />
+                    <Text style={[styles.timeInside, { color: colors.textSubtle, marginTop: 4 }]}>{formatTime(message.createdAt || Date.now())}</Text>
+                  </View>
+                );
+              })()
+            ) : (
+              <>
+                {message.forwardedFrom && (
+                  <View style={[styles.forwardedIndicator, isOwn ? { justifyContent: 'flex-end' } : { justifyContent: 'flex-start' }]}>
+                    <MaterialIcons name="forward" size={14} color={isOwn ? 'rgba(255,255,255,0.7)' : colors.primary} />
+                    <Text style={[styles.forwardedText, isOwn ? { color: 'rgba(255,255,255,0.7)' } : { color: colors.primary }]}>{t('chat.forwarded')}</Text>
+                  </View>
+                )}
+                {message.replyTo && (() => {
+                  const r = message.replyTo;
+                  let mediaUrls = r.mediaUrls || r.media_urls || [];
+                  let type = r.type || '';
+                  let content = r.content || r.text || '';
+                  if (mediaUrls.length === 0 || !type) {
+                    const originalMsg = allMessages?.find(m => m.messageId === r.messageId);
+                    if (originalMsg) {
+                      if (mediaUrls.length === 0) mediaUrls = originalMsg.mediaUrls || originalMsg.media_urls || [];
+                      if (!type) type = originalMsg.type || '';
+                      if (!content) content = originalMsg.content || '';
+                    }
+                  }
+                  const senderId = r.senderId || r.sender_id || '';
+                  if (!type && mediaUrls.length > 0) {
+                    const firstUrl = mediaUrls[0].toLowerCase();
+                    if (firstUrl.match(/\.(mp4|webm|ogg|mov)/i)) type = 'VIDEO';
+                    else if (firstUrl.match(/\.(jpg|jpeg|png|gif|webp|svg)/i)) type = 'IMAGE';
+                    else type = 'FILE';
+                  }
+                  const isVoiceReply = type === 'VOICE' || (content && (content.includes('voice-messages/') || content.match(/\.(webm|m4a|mp3|wav|ogg|opus)(\?|$)/i))) || (mediaUrls.length > 0 && String(mediaUrls[0]).match(/\.(webm|m4a|mp3|wav|ogg|opus)(\?|$)/i));
+                  const isImageReply = type === 'IMAGE' || (type !== 'VIDEO' && type !== 'FILE' && type !== 'VOICE' && mediaUrls.length > 0 && !isVoiceReply);
+                  const isVideoReply = type === 'VIDEO';
+                  const isFileReply = type === 'FILE';
+                  const getFileConfig = (u) => {
+                    const ext = String(u).split('.').pop().split('?')[0].toLowerCase();
+                    if (ext === 'pdf') return { color: '#ef4444', icon: 'file-pdf-box' };
+                    if (['doc', 'docx'].includes(ext)) return { color: '#3b82f6', icon: 'file-word-box' };
+                    if (['xls', 'xlsx'].includes(ext)) return { color: '#10b981', icon: 'file-excel-box' };
+                    if (['zip', 'rar', '7z'].includes(ext)) return { color: '#f59e0b', icon: 'zip-box' };
+                    return { color: '#6366f1', icon: 'file-document-outline' };
+                  };
+                  const thumbUrl = (isImageReply || isVideoReply) && mediaUrls[0] ? (mediaUrls[0].startsWith('http') ? mediaUrls[0] : `${BASE_URL}${mediaUrls[0].startsWith('/') ? '' : '/'}${mediaUrls[0]}`) : null;
+                  let typeLabel = t('chat.message_bracket');
+                  if (isVoiceReply) typeLabel = t('chat.voice_message');
+                  else if (isImageReply) typeLabel = t('chat.image_bracket');
+                  else if (isVideoReply) typeLabel = `[${t('chat.video_preview')}]`;
+                  else if (isFileReply) {
+                    const fileName = mediaUrls[0]?.split('/').pop().split('?')[0].replace(/^[0-9a-f-]{36}_/, '');
+                    typeLabel = fileName ? decodeURIComponent(fileName) : t('chat.file_bracket');
+                  }
+                  const displayReplyText = isVoiceReply ? t('chat.voice_message') : (content.trim() || typeLabel);
+                  return (
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => onPressMessage?.(r.messageId)}
+                      style={[
+                        styles.replyBubble,
+                        isOwn
+                          ? { backgroundColor: 'rgba(255, 255, 255, 0.12)', borderLeftColor: '#fff' }
+                          : { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)', borderLeftColor: colors.primary }
+                      ]}
+                    >
+                      <View style={[styles.replyLine, { backgroundColor: isOwn ? '#fff' : colors.primary }]} />
+
+
+                      {isFileReply && mediaUrls[0] ? (
+                        <View style={[styles.replyThumbnail, { backgroundColor: getFileConfig(mediaUrls[0]).color, alignItems: 'center', justifyContent: 'center' }]}><MaterialCommunityIcons name={getFileConfig(mediaUrls[0]).icon} size={18} color="#fff" /></View>
+                      ) : thumbUrl ? (
+                        <Image source={{ uri: thumbUrl }} style={styles.replyThumbnail} resizeMode="cover" />
+                      ) : isVoiceReply ? (
+                        <View style={[styles.replyThumbnail, { backgroundColor: 'rgba(102, 126, 234, 0.1)', alignItems: 'center', justifyContent: 'center' }]}><MaterialIcons name="mic" size={16} color="#667eea" /></View>
+                      ) : null}
+                      <View style={styles.replyContent}>
+                        <Text style={[styles.replySender, { color: isOwn ? '#fff' : colors.primary }]} numberOfLines={1}>
+                          {(() => {
+                            const currentMeId = String(user?.userId || user?.id || '');
+                            if (String(senderId) === currentMeId) return t('common.you');
+                            let name = r.senderName || r.sender_name;
+                            for (const conv of conversations) {
+                              const found = (conv.members || []).find(m => String(m.userId || m.id || '') === String(senderId));
+                              if (found) { name = found.fullName || found.name; break; }
+                            }
+                            return name || t('common.user');
+                          })()}
+                        </Text>
+                        <Text style={[styles.replyText, { color: isOwn ? 'rgba(255, 255, 255, 0.8)' : (isDark ? '#cbd5e1' : '#64748b') }]} numberOfLines={1}>{displayReplyText}</Text>
+
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })()}
+
+                {!message.isRecalled && (mediaFiles.length > 0) && (() => {
+                  const renderGridItem = (url, index, gridStyle, totalCount) => {
+                    const fullUrl = getFullUrl(url);
+                    const isLastItem = index === 3 && totalCount > 4;
+                    const isVideo = isVideoUrl(url) || (message.type === 'VIDEO' && !isImageUrl(url));
+                    return (
+                      <TouchableOpacity key={index} activeOpacity={0.9} style={[styles.gridImageContainer, gridStyle]} onPress={() => { setSelectedMediaIndex(index); setMediaViewerVisible(true); }}>
+                        {isVideo ? <VideoThumbnail videoUrl={fullUrl} style={styles.gridImage} /> : <Image source={{ uri: fullUrl }} style={styles.gridImage} resizeMode="cover" />}
+                        {isLastItem && <View style={styles.moreImagesOverlay}><Text style={styles.moreImagesText}>+{totalCount - 4}</Text></View>}
+                      </TouchableOpacity>
+                    );
+                  };
+
+                  const renderMediaGrid = (gridUrls) => {
+                    const total = gridUrls.length;
+                    if (total === 0) return null;
+                    let gridContent = null;
+                    if (total === 1) gridContent = renderGridItem(gridUrls[0], 0, styles.singleImage, total);
+                    else if (total === 2) gridContent = (<View style={styles.row}>{renderGridItem(gridUrls[0], 0, styles.halfImage, total)}{renderGridItem(gridUrls[1], 1, styles.halfImage, total)}</View>);
+                    else if (total === 3) gridContent = (<View style={styles.row}>{renderGridItem(gridUrls[0], 0, styles.twoThirdImage, total)}<View style={styles.column}>{renderGridItem(gridUrls[1], 1, styles.oneThirdImage, total)}{renderGridItem(gridUrls[2], 2, styles.oneThirdImage, total)}</View></View>);
+                    else gridContent = (<View style={styles.grid2x2}><View style={styles.row}>{renderGridItem(gridUrls[0], 0, styles.quarterImage, total)}{renderGridItem(gridUrls[1], 1, styles.quarterImage, total)}</View><View style={styles.row}>{renderGridItem(gridUrls[2], 2, styles.quarterImage, total)}{renderGridItem(gridUrls[3], 3, styles.quarterImage, total)}</View></View>);
+                    return <View style={styles.mediaGridContainer}>{gridContent}</View>;
+                  };
+
+                  const renderFileItem = (url, index) => {
+                    const fileName = url.split('/').pop();
+                    const ext = fileName.split('.').pop().toUpperCase();
+                    const getFileColor = (u) => {
+                      const e = u.split('.').pop().toLowerCase();
+                      if (e === 'pdf') return '#ef4444';
+                      if (['doc', 'docx'].includes(e)) return '#3b82f6';
+                      if (['xls', 'xlsx'].includes(e)) return '#10b981';
+                      if (['zip', 'rar', '7z'].includes(e)) return '#f59e0b';
+                      return '#6366f1';
+                    };
+                    return (
+                      <TouchableOpacity key={url + index} style={[styles.fileBubble, isOwn ? styles.ownFileBubble : [styles.otherFileBubble, { backgroundColor: colors.surface200, borderColor: colors.border }], { marginTop: index > 0 || imagesAndVideos.length > 0 ? 8 : 0 }]} onPress={async () => {
+                        const fullUrl = getFullUrl(url);
+                        const cleanName = decodeURIComponent(fileName.replace(/^[0-9a-f-]{36}_/, ''));
+                        setSelectedFile({ url: fullUrl, name: cleanName });
+                        setFileViewerVisible(true);
+                      }}>
+                        <View style={[styles.fileIconBig, { backgroundColor: getFileColor(url) }]}><Text style={styles.fileIconText}>{ext}</Text></View>
+                        <View style={styles.fileInfo}>
+                          <Text style={[styles.fileName, { color: colors.foreground }]} numberOfLines={1}>{decodeURIComponent(fileName.replace(/^[0-9a-f-]{36}_/, ''))}</Text>
+                          <View style={styles.fileStatusRow}>
+                            <Text style={[styles.fileSize, { color: colors.textMuted }]}>{ext}</Text>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  };
+
+                  return (
+                    <View style={{ width: '100%' }}>
+                      {imagesAndVideos.length > 0 && renderMediaGrid(imagesAndVideos)}
+                      {otherFiles.map((url, idx) => renderFileItem(url, idx))}
+                    </View>
+                  );
+                })()}
+
+                {message.isRecalled ? (
+                  <View style={styles.recalledContent}>
+                    <MaterialIcons name="history" size={16} color={isOwn ? 'rgba(255,255,255,0.7)' : colors.textSubtle} style={{ marginRight: 4 }} />
+                    <Text style={[styles.text, styles.recalledText, isOwn ? styles.ownRecalledText : [styles.otherRecalledText, { color: colors.textSubtle }]]}>{t('chat.message_recalled')}</Text>
+
+                  </View>
+                ) : (
+                  (() => {
+                    if (isVoice) {
+                      const voiceUrl = firstMedia || message.content;
+                      const fullVoiceUrl = getFullUrl(voiceUrl);
+                      if (!fullVoiceUrl) return null;
+                      return <VoicePlayer url={fullVoiceUrl} isOwn={isOwn} />;
+                    }
+                    if (message.type === 'CALL_LOG') {
+                      try {
+                        const callData = typeof message.content === 'string' ? JSON.parse(message.content) : (message.content || {});
+                        const cType = callData.callType || 'audio';
+                        const status = callData.status;
+                        const duration = callData.duration || 0;
+
+                        let title = '';
+                        let subtitle = '';
+                        let iconName = 'phone';
+                        let iconColor = isOwn ? '#fff' : colors.primary;
+                        let isOngoing = status === 'ONGOING';
+
+                        if (isOngoing) {
+                          title = cType === 'video' ? t('chat.video_call_ongoing') : t('chat.voice_call_ongoing');
+                          iconName = cType === 'video' ? 'video' : 'phone-in-talk';
+                          subtitle = t('chat.join_call_hint');
+                          iconColor = isOwn ? '#fff' : colors.primary;
+                        } else if (isOwn) {
+                          title = cType === 'video' ? t('chat.outgoing_video_call') : t('chat.outgoing_voice_call');
+                          iconName = 'phone-outgoing';
+                          if (status === 'SUCCESS') {
+                            const mins = Math.floor(duration / 60);
+                            const secs = duration % 60;
+                            subtitle = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                            iconColor = isOwn ? '#fff' : '#10b981';
+                          } else {
+                            subtitle = status === 'REJECTED' ? t('chat.rejected') : t('chat.no_answer');
+                            iconColor = isOwn ? 'rgba(255,255,255,0.8)' : colors.error;
+                          }
+                        } else {
+                          if (status === 'SUCCESS') {
+                            title = cType === 'video' ? t('chat.incoming_video_call') : t('chat.incoming_voice_call');
+                            iconName = 'phone-incoming';
+                            const mins = Math.floor(duration / 60);
+                            const secs = duration % 60;
+                            subtitle = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                            iconColor = '#10b981';
+                          } else {
+                            title = cType === 'video' ? t('chat.missed_video_call') : t('chat.missed_voice_call');
+                            iconName = 'phone-missed';
+                            subtitle = status === 'REJECTED' ? t('chat.rejected') : t('chat.missed_call');
+                            iconColor = colors.error;
+                          }
+                        }
+
+                        const isMissedIncoming = !isOwn && !isOngoing && status !== 'SUCCESS';
+
+                        return (
+                          <View style={styles.callLogContainer}>
+                            <View style={styles.callLogHeader}>
+                              <View style={[styles.callIconWrapper, isOngoing && { backgroundColor: isOwn ? 'rgba(255,255,255,0.2)' : `${colors.primary}1A` }]}>
+                                <MaterialCommunityIcons
+                                  name={iconName}
+                                  size={22}
+                                  color={isOngoing && !isOwn ? colors.primary : iconColor}
+                                />
+                              </View>
+                                <View style={styles.callLogTextGroup}>
+                                  <Text style={[
+                                    styles.callLogTitle,
+                                    isOwn ? styles.ownText : [styles.otherText, { color: colors.foreground }],
+                                    isMissedIncoming && styles.missedCallTitle
+                                  ]} numberOfLines={1}>
+                                    {title}
+                                  </Text>
+                                  <Text style={[
+                                    styles.callLogStatus,
+                                    isOwn ? styles.ownText : [styles.otherText, { color: colors.textMuted }]
+                                  ]}>
+                                    {subtitle} • {formatTime(message.createdAt)}
+                                  </Text>
+                                </View>
+                              </View>
+
+                              <View style={[styles.callLogDivider, { backgroundColor: isOwn ? 'rgba(255,255,255,0.2)' : colors.border }]} />
+                              <TouchableOpacity
+                                style={styles.callBackBtn}
+                                onPress={() => onPressMessage?.({ 
+                                  ...message, 
+                                  action: 'CALL_BACK', 
+                                  callType: callData.callType || 'video', 
+                                  startTime: callData.startTime,
+                                  isOngoing: callData.status === 'ONGOING'
+                                })}
+                              >
+                                <Text style={[styles.callBackText, { color: isOwn ? '#fff' : colors.primary }]}>
+                                  {isOngoing ? t('chat.join_now') : t('chat.call_back')}
+                                </Text>
+
+                              </TouchableOpacity>
+                            </View>
+                          );
+                        } catch (e) { return <Text style={[styles.text, isOwn ? styles.ownText : [styles.otherText, { color: colors.foreground }]]}>{message.content}</Text>; }
+                    }
+
+
+
+                    if (message.type === 'VOTE') {
+                      return renderVoteContent();
+                    }
+                    return (
+                      <View style={{ width: '100%' }}>
+                        {message.content ? renderTextWithMentions(message.content) : null}
+                        
+                        {/* Translation Loading State */}
+                        {translationLoading && translationLoading[message.messageId] && (
+                          <View style={[
+                            styles.translationLoadingContainer,
+                            { borderTopColor: isOwn ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.05)' }
+                          ]}>
+                            <ActivityIndicator size="small" color={isOwn ? '#fff' : colors.primary} style={{ marginRight: 6 }} />
+                            <Text style={[styles.translationLoadingText, { color: isOwn ? 'rgba(255,255,255,0.7)' : colors.textMuted }]}>
+                              {t('chat.ai_translating') || 'AI đang dịch...'}
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* Translation Display */}
+                        {translatedMessages && translatedMessages[message.messageId] && (
+                          <View style={[
+                            styles.translationContainer,
+                            { borderTopColor: isOwn ? 'rgba(255,255,255,0.2)' : colors.border }
+                          ]}>
+                            <View style={styles.translationHeader}>
+                              <View style={styles.translationHeaderLeft}>
+                                <Ionicons name="sparkles" size={12} color={isOwn ? '#fff' : colors.primary} style={{ marginRight: 4 }} />
+                                <Text style={[styles.translationTitle, { color: isOwn ? 'rgba(255,255,255,0.8)' : colors.textMuted }]}>
+                                  {t('chat.ai_translation') || 'Bản dịch AI'}
+                                </Text>
+                              </View>
+                              <TouchableOpacity
+                                onPress={() => onTranslate?.(message.messageId)}
+                                style={styles.translationReloadBtn}
+                              >
+                                <Ionicons name="refresh" size={12} color={isOwn ? 'rgba(255,255,255,0.7)' : colors.primary} />
+                                <Text style={[styles.translationReloadText, { color: isOwn ? 'rgba(255,255,255,0.7)' : colors.primary }]}>
+                                  {t('chat.reload_translation') || 'Dịch lại'}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                            <Text style={[
+                              styles.translatedText,
+                              isOwn ? styles.ownText : [styles.otherText, { color: colors.foreground }]
+                            ]}>
+                              {translatedMessages[message.messageId]}
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* Manual Translate Button */}
+                        {message.type === 'TEXT' &&
+                          !isOwn &&
+                          (!translatedMessages || !translatedMessages[message.messageId]) &&
+                          (!translationLoading || !translationLoading[message.messageId]) && (
+                            <TouchableOpacity
+                              onPress={() => onTranslate?.(message.messageId)}
+                              style={[
+                                styles.translateBtn,
+                                {
+                                  backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(99, 102, 241, 0.08)',
+                                  alignSelf: 'flex-start',
+                                  marginTop: 6
+                                }
+                              ]}
+                            >
+                              <Ionicons name="sparkles-outline" size={10} color={colors.primary} style={{ marginRight: 4 }} />
+                              <Text style={[styles.translateBtnText, { color: colors.primary }]}>
+                                {t('chat.translate_btn') || 'Dịch'}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                      </View>
+                    );
+                  })())}
+
+
+                <Text style={[styles.timeInside, isOwn ? styles.ownTime : [styles.otherTime, { color: colors.textSubtle }]]}>{formatTime(message.createdAt || Date.now())}</Text>
+              </>
+            )}
+
+          </Animated.View>
+          {renderReactions()}
+        </View>
+
+        <View style={[styles.statusContainer, isOwn ? styles.ownStatus : styles.otherStatus, (message.reactions && Object.keys(message.reactions).length > 0) && { marginTop: 22 }]}>
+          {renderReadReceipts()}
+          {renderDeliveryStatus()}
+        </View>
+      </TouchableOpacity>
+
+      <Modal visible={reactionModalVisible} transparent animationType="fade" onRequestClose={closeReactionDetail}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>{t('chat.reaction_details')}</Text>
+              <TouchableOpacity onPress={closeReactionDetail} style={styles.closeButton}><Ionicons name="close" size={22} color={colors.foreground} /></TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <View style={[styles.modalEmojiColumn, { backgroundColor: isDark ? colors.surface100 : colors.surface200, borderRightColor: colors.border }]}>
+                {Object.entries(message.reactions || {}).map(([emoji, users]) => (
+                  <TouchableOpacity key={emoji} style={[styles.modalEmojiButton, { backgroundColor: colors.card }, selectedReactionEmoji === emoji && [styles.modalEmojiButtonActive, { backgroundColor: colors.primary }]]} onPress={() => setSelectedReactionEmoji(emoji)}>
+                    <Text style={styles.modalEmoji}>{emoji}</Text>
+                    <Text style={[styles.modalEmojiCount, { color: colors.textMuted }]}>{Array.isArray(users) ? users.length : 0}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.modalUserColumn}>
+                <Text style={[styles.modalSectionLabel, { color: colors.textSubtle }]}>{t('chat.people_reacted')}</Text>
+                <ScrollView contentContainerStyle={styles.modalUserList}>
+                  {(reactionUserNamesFor(selectedReactionEmoji) || []).length > 0 ? (
+                    reactionUserNamesFor(selectedReactionEmoji).map((name, index) => (
+                      <View key={`${selectedReactionEmoji}-${index}`} style={[styles.modalUserItem, { backgroundColor: isDark ? colors.surface200 : colors.surface100 }]}><Text style={[styles.modalUserText, { color: colors.foreground }]}>{name}</Text></View>
+                    ))
+                  ) : (
+                    <View style={[styles.modalUserItem, { backgroundColor: isDark ? colors.surface200 : colors.surface100 }]}><Text style={[styles.modalUserText, { color: colors.foreground }]}>{t('chat.no_reactions')}</Text></View>
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+          </View>
+
+        </View>
+      </Modal>
+
+      <MediaViewer visible={mediaViewerVisible} onClose={() => setMediaViewerVisible(false)} allMedia={imagesAndVideos.map(url => ({ url: getFullUrl(url), type: (isVideoUrl(url) || (message.type === 'VIDEO' && !isImageUrl(url))) ? 'VIDEO' : 'IMAGE' }))} initialIndex={selectedMediaIndex} />
+      <FileViewerModal visible={fileViewerVisible} onClose={() => setFileViewerVisible(false)} fileUrl={selectedFile.url} fileName={selectedFile.name} />
+      <VoteDetailsModal
+        visible={voteDetailsVisible}
+        onClose={() => setVoteDetailsVisible(false)}
+        vote={selectedVoteData}
+      />
+
+
+      <UserActionModal
+        visible={userActionVisible}
+        user={selectedUserForAction}
+        onClose={() => setUserActionVisible(false)}
+        onMention={(u) => {
+          // Gửi một hành động lên màn hình chat để chèn mention vào input
+          onPressMessage?.({ action: 'MENTION', user: u });
+        }}
+        onMessage={(u) => {
+          router.push({
+            pathname: `/chat/${encodeURIComponent(u.userId || u.id)}`,
+            params: {
+              name: u.fullName || u.name,
+              avatar: u.avatarUrl || u.avatar || u.profilePic,
+              type: 'SINGLE'
+            }
+          });
+        }}
+        onCall={(u) => {
+          onPressMessage?.({ action: 'CALL_BACK', callType: 'audio', targetUser: u });
+        }}
+      />
+    </Animated.View>
+
+  );
+};
+
+const styles = StyleSheet.create({
+  container: { marginVertical: 4, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'flex-end' },
+  ownContainer: { justifyContent: 'flex-end' },
+  otherContainer: { justifyContent: 'flex-start' },
+  avatarContainer: { marginRight: 8, marginBottom: 20 },
+  avatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#eee' },
+  messageWrapper: { maxWidth: '75%', marginBottom: 4 },
+  ownWrapper: { alignItems: 'flex-end' },
+  otherWrapper: { alignItems: 'flex-start' },
+  senderName: { fontSize: 11, color: '#6b7280', marginBottom: 2, marginLeft: 4 },
+  bubbleContainer: { position: 'relative', zIndex: 1, paddingBottom: 0 },
+  bubble: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20 },
+  ownBubble: { backgroundColor: '#667eea', borderBottomRightRadius: 4 },
+  otherBubble: { backgroundColor: '#f3f4f6', borderBottomLeftRadius: 4 },
+  text: { fontSize: 15, lineHeight: 20 },
+  ownText: { color: '#fff' },
+  otherText: { color: '#1f2937' },
+  mentionText: {
+    fontWeight: '900',
+    textDecorationLine: 'none',
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+  },
+
+
+  forwardedIndicator: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, gap: 4, opacity: 0.8 },
+
+  forwardedText: { fontSize: 11, fontStyle: 'italic', fontWeight: '600' },
+  timeInside: { fontSize: 10, marginTop: 2, alignSelf: 'flex-end', minWidth: 45, textAlign: 'right' },
+  ownTime: { color: 'rgba(255, 255, 255, 0.7)' },
+  otherTime: { color: '#9ca3af' },
+  statusContainer: { marginTop: 6, minHeight: 22, zIndex: 1 },
+  ownStatus: { alignItems: 'flex-end', paddingRight: 4 },
+  otherStatus: { alignItems: 'flex-start', paddingLeft: 4 },
+  deliveryStatus: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 },
+  deliveryStatusText: { fontSize: 11, marginLeft: 4, letterSpacing: 0.2 },
+  deliveryStatusOnline: { color: '#4338ca' },
+  deliveryStatusSent: { color: '#6b7280' },
+  replyBubble: { flexDirection: 'row', borderRadius: 12, padding: 8, marginBottom: 8, minWidth: 150, alignSelf: 'stretch', overflow: 'hidden' },
+  replyLine: { width: 4, borderRadius: 2, marginRight: 10 },
+  replyContent: { flex: 1, justifyContent: 'center' },
+  replySender: { fontSize: 13, fontWeight: '800', marginBottom: 2 },
+  replyText: { fontSize: 12, fontWeight: '500' },
+
+  replyThumbnail: { width: 30, height: 30, borderRadius: 4, marginRight: 8 },
+  reactionsContainer: { position: 'absolute', bottom: -18, flexDirection: 'row', zIndex: 10, elevation: 4 },
+  ownReactions: { right: 0 },
+  otherReactions: { left: 0 },
+  readReceiptsContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 4, marginBottom: 2 },
+  readAvatar: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: '#fff' },
+  moreReadersBadge: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#f3f4f6', justifyContent: 'center', alignItems: 'center', marginLeft: -6, borderWidth: 1.5, borderColor: '#fff' },
+  moreReadersText: { fontSize: 10, fontWeight: 'bold', color: '#6b7280' },
+  reactionBadge: { backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 1 },
+  reactionEmoji: { fontSize: 12 },
+  reactionCount: { fontSize: 10, fontWeight: '700', marginLeft: 2, color: '#6b7280' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+  modalContent: { width: '100%', maxWidth: 520, borderRadius: 24, overflow: 'hidden', backgroundColor: '#0f172a' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  modalTitle: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  closeButton: { padding: 8 },
+  modalBody: { flexDirection: 'row', minHeight: 220 },
+  modalEmojiColumn: { width: 90, paddingVertical: 14, paddingHorizontal: 10, backgroundColor: '#111827', borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.08)' },
+  modalEmojiButton: { marginBottom: 10, backgroundColor: '#0f172a', borderRadius: 18, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center' },
+  modalEmojiButtonActive: { backgroundColor: '#2563eb' },
+  modalEmoji: { fontSize: 20 },
+  modalEmojiCount: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
+  modalUserColumn: { flex: 1, padding: 16 },
+  modalSectionLabel: { color: '#94a3b8', marginBottom: 12, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
+  modalUserList: { paddingBottom: 18 },
+  modalUserItem: { marginBottom: 10, backgroundColor: '#1e293b', borderRadius: 18, paddingVertical: 12, paddingHorizontal: 14 },
+  modalUserText: { color: '#fff', fontSize: 14 },
+  recalledContent: { flexDirection: 'row', alignItems: 'center' },
+  recalledText: { fontStyle: 'italic' },
+  ownRecalledText: { color: 'rgba(255,255,255,0.7)' },
+  otherRecalledText: { color: '#9ca3af' },
+  mediaGridContainer: { width: 260, borderRadius: 16, overflow: 'hidden', marginVertical: 4, backgroundColor: 'rgba(0,0,0,0.05)' },
+  row: { flexDirection: 'row' },
+  column: { flexDirection: 'column', flex: 1 },
+  gridImageContainer: { padding: 1, overflow: 'hidden' },
+  gridImage: { width: '100%', height: '100%', backgroundColor: '#e5e7eb' },
+  singleImage: { width: 260, height: 320 },
+  halfImage: { width: 130, height: 180 },
+  twoThirdImage: { width: 173, height: 240 },
+  oneThirdImage: { width: 87, height: 120 },
+  grid2x2: { width: 260, height: 260 },
+  quarterImage: { width: 130, height: 130 },
+  moreImagesOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  moreImagesText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
+  playIconOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' },
+  fileBubble: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 12, minWidth: 240, maxWidth: '100%', marginVertical: 4, borderWidth: 1 },
+  ownFileBubble: { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.2)' },
+  otherFileBubble: { backgroundColor: '#fff', borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
+  fileIconBig: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  fileIconText: { color: '#fff', fontSize: 10, fontWeight: '900' },
+  fileInfo: { flex: 1, marginLeft: 12 },
+  fileName: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  fileStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  fileSize: { fontSize: 11, fontWeight: '500' },
+  downloadedBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  downloadedText: { fontSize: 10, fontWeight: '600', color: '#10b981' },
+  systemMessageContainer: { width: '100%', alignItems: 'center', marginVertical: 12, paddingHorizontal: 20 },
+  systemMessageWrapper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.05)', paddingVertical: 6, paddingHorizontal: 16, borderRadius: 20, gap: 8 },
+  systemDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#6366f1', opacity: 0.6 },
+  systemMessageText: { fontSize: 11, fontWeight: '800', color: '#64748b', letterSpacing: 0.5, textAlign: 'center' },
+  callLogContainer: { minWidth: 200, padding: 4 },
+  callLogHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  callIconWrapper: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center' },
+  ongoingIconWrapper: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  callLogTextGroup: { flex: 1 },
+  callLogTitle: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  ongoingLogTitle: { color: '#fff' },
+  callLogStatus: { fontSize: 12, opacity: 0.8 },
+  ongoingLogSub: { color: 'rgba(255,255,255,0.7)' },
+  callLogDivider: { height: 1, marginBottom: 8 },
+  callBackBtn: { alignItems: 'center', paddingVertical: 4 },
+  callBackText: { fontWeight: '600', fontSize: 14 },
+  missedCallTitle: { color: '#ef4444' },
+  ongoingLogContainer: { minWidth: 260, padding: 14, backgroundColor: '#6366f1', borderRadius: 20, shadowColor: '#6366f1', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
+  ongoingLogTitle: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  ongoingLogSub: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600' },
+  ongoingIconWrapper: { backgroundColor: 'rgba(255,255,255,0.25)', width: 44, height: 44, borderRadius: 22 },
+  ongoingJoinBtn: { backgroundColor: '#fff', paddingVertical: 12, borderRadius: 14, alignItems: 'center', marginTop: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  ongoingJoinBtnText: { color: '#6366f1', fontWeight: '900', fontSize: 15, letterSpacing: 0.5 },
+  stickerBubbleContainer: { alignItems: 'center', justifyContent: 'center', padding: 4 },
+  bubbleStickerImage: { width: 140, height: 140, resizeMode: 'contain' },
+  translateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  translateBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  translationLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  translationLoadingText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  translationContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    width: '100%',
+  },
+  translationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  translationHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  translationTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  translationReloadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 2,
+  },
+  translationReloadText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: 3,
+  },
+  translatedText: {
+    fontSize: 15,
+    lineHeight: 20,
+    marginTop: 2,
+  },
+});
+
+
+
+export default React.memo(ChatBubble);

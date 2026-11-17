@@ -1,0 +1,91 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+application-local.yml
+application-local.properties
+application-secret.*
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+!/mobile/android/app/debug.keystore
+
+# Node / Web
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.vite/
+.cache/
+coverage/
+*.tsbuildinfo
+
+# Build artifacts
+dist/
+dist-ssr/
+build/
+out/
+web-build/
+.gradle/
+.cxx/
+
+# Expo / React Native / Mobile
+.expo/
+.expo-shared/
+expo-env.d.ts
+.metro-health-check*
+*.jsbundle
+*.hprof
+*.orig.*
+local.properties
+Pods/
+DerivedData/
+F5chat.apk
+*.apk
+*.aab
+*.ipa
+
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+.mvn/
+!.mvn/wrapper/maven-wrapper.jar
+!/mobile/android/gradle/wrapper/gradle-wrapper.jar
+
+# Python / Whisper
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# Docker local data
+backend/docker/redis/data/
+dump.rdb
+
+# Logs & Temp files
+logs/
+*.log
+*.log.*
+error_log.txt
+server_log.txt
+temp_*
+hs_err_pid*.log
+
+# IDE & OS
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
