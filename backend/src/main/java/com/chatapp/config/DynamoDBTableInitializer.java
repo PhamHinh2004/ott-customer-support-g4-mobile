@@ -3,12 +3,14 @@ package com.chatapp.config;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapper;
 import com.amazonaws.services.dynamodbv2.model.*;
+import com.amazonaws.services.dynamodbv2.util.TableUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.ApplicationListener;
+import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.stereotype.Component;
 
@@ -16,9 +18,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
 @Slf4j
 @RequiredArgsConstructor
-public class DynamoDBTableInitializer implements ApplicationListener<ApplicationReadyEvent> {
+public class DynamoDBTableInitializer implements CommandLineRunner {
 
     private final AmazonDynamoDB amazonDynamoDB;
     private final DynamoDBMapper dynamoDBMapper;
@@ -30,7 +33,7 @@ public class DynamoDBTableInitializer implements ApplicationListener<Application
     private String billingMode;
 
     @Override
-    public void onApplicationEvent(ApplicationReadyEvent event) {
+    public void run(String... args) {
         if (!autoCreateTables) {
             log.info("DynamoDB auto-create-tables is disabled.");
             return;
@@ -89,6 +92,12 @@ public class DynamoDBTableInitializer implements ApplicationListener<Application
                 log.info("Creating DynamoDB Table: {}", tableName);
                 amazonDynamoDB.createTable(request);
                 log.info("Successfully requested creation of table: {}", tableName);
+                try {
+                    TableUtils.waitUntilActive(amazonDynamoDB, tableName, 15000, 1000);
+                    log.info("DynamoDB Table {} is now ACTIVE", tableName);
+                } catch (Exception waitEx) {
+                    log.warn("Table {} creation requested, wait status: {}", tableName, waitEx.getMessage());
+                }
             }
         } catch (Exception e) {
             log.error("Failed to create table for entity {}", clazz.getSimpleName(), e);

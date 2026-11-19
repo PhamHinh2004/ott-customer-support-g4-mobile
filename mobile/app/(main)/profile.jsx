@@ -17,7 +17,7 @@ import { useRouter } from 'expo-router';
 import { logoutUser, restoreState } from '../../src/store/authSlice';
 import { clearChatState } from '../../src/store/chatSlice';
 import { userApi } from '../../src/api/userApi';
-import * as SecureStore from 'expo-secure-store';
+import { getStorageItem, setStorageItem } from '../../src/utils/storage';
 import DeleteAccountModal from '../../src/components/DeleteAccountModal';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -40,8 +40,8 @@ const ProfileScreen = () => {
       // Backend thường trả về { data: { ...user } }
       const updatedUser = response.data || response;
 
-      const token = await SecureStore.getItemAsync('accessToken');
-      const refreshToken = await SecureStore.getItemAsync('refreshToken');
+      const token = await getStorageItem('accessToken');
+      const refreshToken = await getStorageItem('refreshToken');
 
       if (updatedUser) {
         dispatch(restoreState({
@@ -49,7 +49,7 @@ const ProfileScreen = () => {
           accessToken: token,
           refreshToken: refreshToken,
         }));
-        await SecureStore.setItemAsync('user', JSON.stringify(updatedUser));
+        await setStorageItem('user', JSON.stringify(updatedUser));
       }
     } catch (error) {
       // Bỏ qua log error nếu là 401 vì đã được xử lý toàn cục ở axiosClient

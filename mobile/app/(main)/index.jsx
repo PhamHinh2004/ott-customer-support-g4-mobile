@@ -15,7 +15,7 @@ import { conversationApi } from '../../src/api/chatApi';
 import { useTheme } from '../../src/context/ThemeContext';
 import { getPreviewText } from '../../src/utils/messageUtils';
 import { useTranslation } from 'react-i18next';
-import * as SecureStore from 'expo-secure-store';
+import { getStorageItem, setStorageItem } from '../../src/utils/storage';
 
 
 const HomeScreen = () => {
@@ -35,7 +35,7 @@ const HomeScreen = () => {
   useEffect(() => {
     (async () => {
       try {
-        const stored = await SecureStore.getItemAsync('hidden_conversation_ids');
+        const stored = await getStorageItem('hidden_conversation_ids');
         if (stored) setHiddenConvIds(JSON.parse(stored));
       } catch (e) {}
     })();
@@ -44,7 +44,7 @@ const HomeScreen = () => {
   const saveHiddenConvIds = async (ids) => {
     setHiddenConvIds(ids);
     try {
-      await SecureStore.setItemAsync('hidden_conversation_ids', JSON.stringify(ids));
+      await setStorageItem('hidden_conversation_ids', JSON.stringify(ids));
     } catch (e) {}
   };
 

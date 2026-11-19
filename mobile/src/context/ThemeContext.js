@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import { getStorageItem, setStorageItem } from '../utils/storage';
 
 const THEME_STORAGE_KEY = 'app_theme_mode';
 
@@ -56,7 +56,7 @@ export const ThemeProvider = ({ children }) => {
   useEffect(() => {
     const loadTheme = async () => {
       try {
-        const savedTheme = await SecureStore.getItemAsync(THEME_STORAGE_KEY);
+        const savedTheme = await getStorageItem(THEME_STORAGE_KEY);
         if (savedTheme) {
           setThemeState(savedTheme);
         } else {
@@ -71,7 +71,7 @@ export const ThemeProvider = ({ children }) => {
 
   const setTheme = async (newTheme) => {
     setThemeState(newTheme);
-    await SecureStore.setItemAsync(THEME_STORAGE_KEY, newTheme);
+    await setStorageItem(THEME_STORAGE_KEY, newTheme);
   };
 
   const toggleTheme = () => {

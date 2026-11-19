@@ -81,6 +81,8 @@ public class OtpService {
     public boolean verifyOtp(String email, String otp, String purpose) {
 
         email = normalize(email);
+        otp = otp == null ? null : otp.trim();
+        purpose = normalizePurpose(purpose);
 
         String key = buildKey(email, purpose);
         String attemptsKey = buildAttemptsKey(email, purpose);
@@ -170,15 +172,19 @@ public class OtpService {
     }
 
     private String buildKey(String email, String purpose) {
-        return "otp:" + email + ":" + purpose;
+        return "otp:" + email + ":" + normalizePurpose(purpose);
     }
 
     private String buildAttemptsKey(String email, String purpose) {
-        return "otp:attempts:" + email + ":" + purpose;
+        return "otp:attempts:" + email + ":" + normalizePurpose(purpose);
     }
 
     private String normalize(String email) {
         return email.toLowerCase().trim();
+    }
+
+    private String normalizePurpose(String purpose) {
+        return purpose == null ? "" : purpose.trim().toUpperCase();
     }
 
 }

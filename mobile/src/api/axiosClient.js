@@ -1,5 +1,5 @@
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import { getStorageItem, setStorageItem, removeStorageItem } from '../utils/storage';
 
 // Sử dụng biến môi trường từ Expo
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -16,17 +16,17 @@ const axiosClient = axios.create({
 axiosClient.interceptors.request.use(
   async (config) => {
     try {
-      const token = await SecureStore.getItemAsync('accessToken');
+      const token = await getStorageItem('accessToken');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
       
-      const sessionId = await SecureStore.getItemAsync('sessionId');
+      const sessionId = await getStorageItem('sessionId');
       if (sessionId) {
         config.headers['X-Session-Id'] = sessionId;
       }
 
-      const userRaw = await SecureStore.getItemAsync('user');
+      const userRaw = await getStorageItem('user');
       if (userRaw) {
         try {
           const userObj = JSON.parse(userRaw);
@@ -70,7 +70,7 @@ axiosClient.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = await SecureStore.getItemAsync('refreshToken');
+        const refreshToken = await getStorageItem('refreshToken');
         if (!refreshToken) throw new Error('No refresh token');
 
         // Gọi API refresh token (sử dụng instance axios sạch để tránh loop)
@@ -81,18 +81,18 @@ axiosClient.interceptors.response.use(
         const { accessToken, refreshToken: newRefreshToken } = data;
 
         if (accessToken) {
-          await SecureStore.setItemAsync('accessToken', accessToken);
-          if (newRefreshToken) await SecureStore.setItemAsync('refreshToken', newRefreshToken);
+          await setStorageItem('accessToken', accessToken);
+          if (newRefreshToken) await setStorageItem('refreshToken', newRefreshToken);
 
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           return axios(originalRequest);
         }
       } catch (refreshError) {
         // Nếu refresh thất bại -> Logout
-        await SecureStore.deleteItemAsync('accessToken');
-        await SecureStore.deleteItemAsync('refreshToken');
-        await SecureStore.deleteItemAsync('sessionId');
-        await SecureStore.deleteItemAsync('user');
+        await removeStorageItem('accessToken');
+        await removeStorageItem('refreshToken');
+        await removeStorageItem('sessionId');
+        await removeStorageItem('user');
         
         if (store && !isUnauthorizedAlertShowing) {
           isUnauthorizedAlertShowing = true;
@@ -113,10 +113,10 @@ axiosClient.interceptors.response.use(
 
     // Nếu lỗi 401 ngay cả khi đã retry hoặc không thể retry
     if (error.response?.status === 401) {
-       await SecureStore.deleteItemAsync('accessToken');
-       await SecureStore.deleteItemAsync('refreshToken');
-       await SecureStore.deleteItemAsync('sessionId');
-       await SecureStore.deleteItemAsync('user');
+       await removeStorageItem('accessToken');
+       await removeStorageItem('refreshToken');
+       await removeStorageItem('sessionId');
+       await removeStorageItem('user');
        
        if (store && !isUnauthorizedAlertShowing) {
          isUnauthorizedAlertShowing = true;

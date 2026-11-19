@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { Provider, useDispatch, useSelector } from 'react-redux';
 import * as SplashScreen from 'expo-splash-screen';
-import * as SecureStore from 'expo-secure-store';
+import { getStorageItem } from '../src/utils/storage';
 import store from '../src/store/store';
 import { restoreState, sessionExpired } from '../src/store/authSlice';
 import { Alert } from 'react-native';
@@ -45,10 +45,10 @@ function RootLayoutNav() {
   useEffect(() => {
     const initiateApp = async () => {
       try {
-        const token = await SecureStore.getItemAsync('accessToken');
-        const refreshToken = await SecureStore.getItemAsync('refreshToken');
-        const userJson = await SecureStore.getItemAsync('user');
-        const sessionId = await SecureStore.getItemAsync('sessionId');
+        const token = await getStorageItem('accessToken');
+        const refreshToken = await getStorageItem('refreshToken');
+        const userJson = await getStorageItem('user');
+        const sessionId = await getStorageItem('sessionId');
         
         if (token) {
           dispatch(restoreState({

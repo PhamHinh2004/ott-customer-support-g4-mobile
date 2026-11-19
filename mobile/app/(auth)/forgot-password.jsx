@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/hooks/useAuth';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
+import { getStorageItem, setStorageItem, removeStorageItem } from '../../src/utils/storage';
 
 /**
  * ForgotPasswordScreen (Mobile)
@@ -94,12 +94,12 @@ const ForgotPasswordScreen = () => {
         return;
       }
       try {
-        const stored = await SecureStore.getItemAsync(cooldownKey);
+        const stored = await getStorageItem(cooldownKey);
         const storedCooldown = Number(stored || 0);
         if (storedCooldown > Date.now()) {
           setCooldownUntil(storedCooldown);
         } else {
-          await SecureStore.deleteItemAsync(cooldownKey);
+          await removeStorageItem(cooldownKey);
           setCooldownUntil(0);
         }
       } catch (e) {
@@ -113,7 +113,7 @@ const ForgotPasswordScreen = () => {
     const nextAllowedAt = Date.now() + COOLDOWN_MS;
     setCooldownUntil(nextAllowedAt);
     if (targetEmail && cooldownKey) {
-      await SecureStore.setItemAsync(cooldownKey, String(nextAllowedAt));
+      await setStorageItem(cooldownKey, String(nextAllowedAt));
     }
   };
 

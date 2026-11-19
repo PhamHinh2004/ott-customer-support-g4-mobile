@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/hooks/useAuth';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
+import { getStorageItem, setStorageItem, removeStorageItem } from '../../src/utils/storage';
 
 /**
  * RegisterScreen (Mobile)
@@ -40,6 +40,7 @@ const RegisterScreen = () => {
   const [otpCode, setOtpCode] = useState('');
   const [verificationSent, setVerificationSent] = useState(false);
   const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [sendingOtp, setSendingOtp] = useState(false);
 
   const [localError, setLocalError] = useState('');
   const [phoneError, setPhoneError] = useState('');
@@ -70,7 +71,7 @@ const RegisterScreen = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // Load cooldown from SecureStore
+  // Load cooldown from SecureStore (safe for web)
   useEffect(() => {
     const loadCooldown = async () => {
       if (!cooldownKey) {
@@ -78,15 +79,16 @@ const RegisterScreen = () => {
         return;
       }
       try {
-        const stored = await SecureStore.getItemAsync(cooldownKey);
+        const stored = await getStorageItem(cooldownKey);
         const storedCooldown = Number(stored || 0);
         if (storedCooldown > Date.now()) {
           setCooldownUntil(storedCooldown);
         } else {
-          await SecureStore.deleteItemAsync(cooldownKey);
+          try { await removeStorageItem(cooldownKey); } catch (_) {}
           setCooldownUntil(0);
         }
       } catch (e) {
+        // expo-secure-store không hoạt động trên web — bỏ qua
         setCooldownUntil(0);
       }
     };
@@ -97,7 +99,11 @@ const RegisterScreen = () => {
     const nextAllowedAt = Date.now() + COOLDOWN_MS;
     setCooldownUntil(nextAllowedAt);
     if (targetEmail && cooldownKey) {
-      await SecureStore.setItemAsync(cooldownKey, String(nextAllowedAt));
+      try {
+        await setStorageItem(cooldownKey, String(nextAllowedAt));
+      } catch (_) {
+        // expo-secure-store không hoạt động trên web — bỏ qua, cooldown vẫn hoạt động in-memory
+      }
     }
   };
 
@@ -127,12 +133,15 @@ const RegisterScreen = () => {
     }
 
     try {
+      setSendingOtp(true);
       await sendOtp(email, 'REGISTRATION');
       await applyCooldown(email);
       setVerificationSent(true);
       Alert.alert('Thông báo', `Mã OTP đã được gửi đến ${email}`);
     } catch (err) {
       setLocalError(err?.response?.data?.message || 'Không thể gửi mã OTP');
+    } finally {
+      setSendingOtp(false);
     }
   };
 
@@ -294,12 +303,12 @@ const RegisterScreen = () => {
               ) : null}
 
               <TouchableOpacity
-                style={[styles.primaryButton, (loading || (step === 'verify-email' && isCooldownActive && !verificationSent)) && { opacity: 0.7 }]}
+                style={[styles.primaryButton, (loading || sendingOtp || (step === 'verify-email' && isCooldownActive && !verificationSent)) && { opacity: 0.7 }]}
                 onPress={verificationSent ? handleVerifyOtp : handleSendOtp}
-                disabled={loading || (step === 'verify-email' && isCooldownActive && !verificationSent)}
+                disabled={loading || sendingOtp || (step === 'verify-email' && isCooldownActive && !verificationSent)}
                 activeOpacity={0.8}
               >
-                {loading ? <ActivityIndicator color="#fff" /> : (
+                {loading || sendingOtp ? <ActivityIndicator color="#fff" /> : (
                   <Text style={styles.buttonText}>
                     {verificationSent 
                       ? 'XÁC THỰC OTP' 
@@ -311,8 +320,8 @@ const RegisterScreen = () => {
               {verificationSent && (
                 <TouchableOpacity 
                   onPress={handleSendOtp} 
-                  style={[styles.resendButton, isCooldownActive && { opacity: 0.5 }]}
-                  disabled={loading || isCooldownActive}
+                  style={[styles.resendButton, (sendingOtp || isCooldownActive) && { opacity: 0.5 }]}
+                  disabled={loading || sendingOtp || isCooldownActive}
                   activeOpacity={0.7}
                 >
                   <Text style={styles.resendText}>

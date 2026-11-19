@@ -20,7 +20,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { userApi } from '../../src/api/userApi';
 import { mediaApi } from '../../src/api/mediaApi';
 import { restoreState } from '../../src/store/authSlice';
-import * as SecureStore from 'expo-secure-store';
+import { getStorageItem, setStorageItem } from '../../src/utils/storage';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useTranslation } from 'react-i18next';
 
@@ -103,7 +103,7 @@ const EditProfileScreen = () => {
     setLoading(true);
     try {
       // Đảm bảo lấy token mới nhất trước khi gọi PUT
-      const currentToken = await SecureStore.getItemAsync('accessToken');
+      const currentToken = await getStorageItem('accessToken');
 
       const updateData = {
         firstName: firstName.trim(),
@@ -118,7 +118,7 @@ const EditProfileScreen = () => {
       const updatedUser = response.data || response;
 
       // Cập nhật Redux Store
-      const refreshToken = await SecureStore.getItemAsync('refreshToken');
+      const refreshToken = await getStorageItem('refreshToken');
       dispatch(restoreState({
         user: updatedUser,
         accessToken: currentToken,
@@ -126,7 +126,7 @@ const EditProfileScreen = () => {
       }));
 
       // Lưu vào máy
-      await SecureStore.setItemAsync('user', JSON.stringify(updatedUser));
+      await setStorageItem('user', JSON.stringify(updatedUser));
 
       Alert.alert(t('common.success'), t('profile.update_success'), [
         {
