@@ -126,17 +126,17 @@ export default function MainLayout() {
       <Tabs.Screen name="notifications" options={{ title: t('notifications.title'), icon: 'notifications' }} />
       <Tabs.Screen name="profile" options={{ title: t('profile.title'), icon: 'person' }} />
 
-      <Tabs.Screen name="edit-profile" options={{ href: null, tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
-      <Tabs.Screen name="change-password" options={{ href: null, tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
-      <Tabs.Screen name="chat/[id]" options={{ href: null, tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
-      <Tabs.Screen name="chat-info/[id]" options={{ href: null, tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
-      <Tabs.Screen name="shared-media/[id]" options={{ href: null, tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
-      <Tabs.Screen name="shared-files/[id]" options={{ href: null, tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
-      <Tabs.Screen name="shared-links/[id]" options={{ href: null, tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
-      <Tabs.Screen name="qr-scanner" options={{ href: null, tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
-      <Tabs.Screen name="group-preview" options={{ href: null, tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
-      <Tabs.Screen name="my-cloud" options={{ href: null, tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
-      <Tabs.Screen name="settings" options={{ href: null, tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
+      <Tabs.Screen name="edit-profile" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
+      <Tabs.Screen name="change-password" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
+      <Tabs.Screen name="chat/[id]" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
+      <Tabs.Screen name="chat-info/[id]" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
+      <Tabs.Screen name="shared-media/[id]" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
+      <Tabs.Screen name="shared-files/[id]" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
+      <Tabs.Screen name="shared-links/[id]" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
+      <Tabs.Screen name="qr-scanner" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
+      <Tabs.Screen name="group-preview" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
+      <Tabs.Screen name="my-cloud" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
+      <Tabs.Screen name="settings" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
       </Tabs>
 
       <VideoCall
@@ -164,7 +164,7 @@ export default function MainLayout() {
   );
 }
 
-const CustomTabBar = ({ state, descriptors, navigation, badge }) => {
+const CustomTabBar = ({ state, descriptors, emitter, navigateToTab, badge }) => {
   const focusedOptions = descriptors[state.routes[state.index].key].options;
 
   if (focusedOptions.tabBarStyle?.display === 'none') {
@@ -251,9 +251,9 @@ const CustomTabBar = ({ state, descriptors, navigation, badge }) => {
               }
               return;
             }
-            const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+            const event = emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
             if (!isFocused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
+              navigateToTab(route.key);
             }
           };
 

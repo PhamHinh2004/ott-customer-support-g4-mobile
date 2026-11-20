@@ -14,6 +14,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/hooks/useAuth';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { getPhoneNumberFromParams } from '../../src/utils/otpParams';
 
 /**
  * OTPScreen (Mobile)
@@ -21,14 +23,22 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
  * Redesigned for F5 Chat with premium dark theme and unified UI
  */
 
-const OTPScreen = ({ navigation, route }) => {
+const OTPScreen = () => {
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const phoneNumber = getPhoneNumberFromParams(params.phoneNumber);
   const { verify, resend, loading, error: authError, accessToken, clearError } = useAuth();
-  const phoneNumber = route.params?.phoneNumber;
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
   const inputRefs = useRef([]);
+
+  useEffect(() => {
+    if (!phoneNumber) {
+      router.replace('/(auth)/login');
+    }
+  }, [phoneNumber, router]);
 
   // Clear errors on load
   useEffect(() => {
@@ -105,6 +115,8 @@ const OTPScreen = ({ navigation, route }) => {
     const secs = seconds % 60;
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
+
+  if (!phoneNumber) return null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
