@@ -44,6 +44,7 @@ public class MessageService {
     private final TranslationCacheService translationCacheService;
     private final TranslationBatchService translationBatchService;
     private final MessageCacheService messageCacheService;
+    private final WhisperService whisperService;
 
     private static final String AI_BOT_ID   = "shop-expert-ai-bot";
     private static final String AI_BOT_NAME = "ShopExpert AI";
@@ -54,11 +55,39 @@ public class MessageService {
 
     /**
      * Dịch 1 message: check cache trước, miss thì vào batch queue Python.
+     * Hỗ trợ cả tin nhắn TEXT và VOICE/AUDIO (transcribe trước rồi dịch).
      */
     public CompletableFuture<String> translateMessage(Message message, String srcLang, String tgtLang) {
         if (Boolean.TRUE.equals(message.getIsRecalled())) {
             return CompletableFuture.completedFuture("[Tin nhắn đã bị thu hồi]");
         }
+
+        if ("VOICE".equalsIgnoreCase(message.getType()) || "AUDIO".equalsIgnoreCase(message.getType())) {
+            String audioUrl = (message.getMediaUrls() != null && !message.getMediaUrls().isEmpty())
+                    ? message.getMediaUrls().get(0)
+                    : message.getContent();
+            if (audioUrl == null || audioUrl.isBlank()) {
+                return CompletableFuture.completedFuture("");
+            }
+
+            return CompletableFuture.supplyAsync(() -> {
+                WhisperService.TranscriptionResult stt = whisperService.transcribeFromUrl(audioUrl, null);
+                String transcript = stt.text();
+                if (transcript == null || transcript.isBlank()) {
+                    return "";
+                }
+                String effectiveSrc = (stt.nllbLanguage() != null && !stt.nllbLanguage().isBlank())
+                        ? stt.nllbLanguage()
+                        : srcLang;
+                return translationCacheService.get(transcript, effectiveSrc, tgtLang)
+                        .orElseGet(() -> {
+                            String translated = translationBatchService.translate(transcript, effectiveSrc, tgtLang).join();
+                            translationCacheService.set(transcript, effectiveSrc, tgtLang, translated);
+                            return translated;
+                        });
+            });
+        }
+
         if (!"TEXT".equals(message.getType()) || message.getContent() == null) {
             return CompletableFuture.completedFuture(message.getContent());
         }

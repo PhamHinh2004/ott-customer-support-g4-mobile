@@ -68,12 +68,16 @@ const ChatDetailScreen = () => {
   const [localFriendship, setLocalFriendship] = useState(null);
   const [translatedMessages, setTranslatedMessages] = useState({});
   const [translationLoading, setTranslationLoading] = useState({});
+  const [transcribedMessages, setTranscribedMessages] = useState({});
+  const [transcriptionLoading, setTranscriptionLoading] = useState({});
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [savingLang, setSavingLang] = useState(false);
 
   useEffect(() => {
     setTranslatedMessages({});
     setTranslationLoading({});
+    setTranscribedMessages({});
+    setTranscriptionLoading({});
   }, [conversationId]);
 
   // KÍCH HOẠT WEBSOCKET TRỰC TIẾP TẠI ĐÂY
@@ -652,15 +656,68 @@ const ChatDetailScreen = () => {
     setModalVisible(true);
   };
 
+  const handleTranscribe = async (messageId) => {
+    const msg = messages.find(m => m.messageId === messageId);
+    if (!msg) return null;
+
+    const voiceUrl = (Array.isArray(msg.mediaUrls) && msg.mediaUrls[0]) || msg.content;
+    if (!voiceUrl) return null;
+
+    setTranscriptionLoading(prev => ({ ...prev, [messageId]: true }));
+    try {
+      const res = await chatApi.transcribeVoiceUrl(voiceUrl);
+      const data = res?.data || res;
+      const transcriptText = data?.transcript;
+      const nllbLanguage = data?.nllbLanguage || null;
+
+      if (transcriptText) {
+        setTranscribedMessages(prev => ({
+          ...prev,
+          [messageId]: { text: transcriptText, nllbLanguage },
+        }));
+        return { text: transcriptText, nllbLanguage };
+      }
+      Alert.alert(
+        t('chat.error') || 'Lỗi',
+        t('chat.cannot_transcribe') || 'Không thể chuyển giọng nói thành văn bản'
+      );
+      return null;
+    } catch (err) {
+      console.error('Transcription failed:', err);
+      Alert.alert(
+        t('chat.transcribe_failed') || 'Chuyển giọng nói thất bại',
+        err.response?.data?.message || err.message
+      );
+      return null;
+    } finally {
+      setTranscriptionLoading(prev => ({ ...prev, [messageId]: false }));
+    }
+  };
+
   const handleTranslate = async (messageId, overrideTargetLang = null) => {
     const msg = messages.find(m => m.messageId === messageId);
-    if (!msg || !msg.content) return;
+    if (!msg || (!msg.content && !(Array.isArray(msg.mediaUrls) && msg.mediaUrls.length > 0))) return;
 
     const tgtLang = normalizePreferredLanguage(overrideTargetLang) || preferredLanguage || 'vie_Latn';
-    const srcLang = detectMessageLanguage(msg.content, msg.language, tgtLang);
+    const cachedTranscript = transcribedMessages[messageId];
+    const isVoiceMsg = msg.type === 'VOICE' || msg.type === 'AUDIO';
 
     setTranslationLoading(prev => ({ ...prev, [messageId]: true }));
     try {
+      let srcLang = msg.language;
+      if (isVoiceMsg) {
+        if (cachedTranscript?.nllbLanguage) {
+          srcLang = cachedTranscript.nllbLanguage;
+        } else if (cachedTranscript?.text) {
+          srcLang = detectMessageLanguage(cachedTranscript.text, msg.language, tgtLang);
+        } else {
+          const sttResult = await handleTranscribe(messageId);
+          srcLang = sttResult?.nllbLanguage || detectMessageLanguage(sttResult?.text || '', msg.language, tgtLang);
+        }
+      } else {
+        srcLang = detectMessageLanguage(msg.content, msg.language, tgtLang);
+      }
+
       const res = await chatApi.translateMessage(messageId, realId, srcLang, tgtLang);
       const translatedText = res?.data?.translated || res?.translated;
       if (translatedText) {
@@ -761,6 +818,9 @@ const ChatDetailScreen = () => {
         break;
       case 'unpin':
         dispatch(unpinMessage({ messageId: message.messageId, conversationId: realId }));
+        break;
+      case 'transcribe':
+        handleTranscribe(message.messageId);
         break;
       case 'translate':
         handleTranslate(message.messageId);
@@ -1074,6 +1134,9 @@ const ChatDetailScreen = () => {
                   translatedMessages={translatedMessages}
                   translationLoading={translationLoading}
                   onTranslate={handleTranslate}
+                  transcribedMessages={transcribedMessages}
+                  transcriptionLoading={transcriptionLoading}
+                  onTranscribe={handleTranscribe}
                 />
               </ImageBackground>
             </View>
@@ -1098,6 +1161,9 @@ const ChatDetailScreen = () => {
               translatedMessages={translatedMessages}
               translationLoading={translationLoading}
               onTranslate={handleTranslate}
+              transcribedMessages={transcribedMessages}
+              transcriptionLoading={transcriptionLoading}
+              onTranscribe={handleTranscribe}
             />
           )}
         </View>

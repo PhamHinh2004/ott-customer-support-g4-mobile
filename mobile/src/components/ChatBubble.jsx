@@ -45,7 +45,10 @@ const ChatBubble = ({
   members = [],
   translatedMessages = {},
   translationLoading = {},
-  onTranslate
+  onTranslate,
+  transcribedMessages = {},
+  transcriptionLoading = {},
+  onTranscribe
 }) => {
   const { t } = useTranslation();
 
@@ -673,7 +676,130 @@ const ChatBubble = ({
                       const voiceUrl = firstMedia || message.content;
                       const fullVoiceUrl = getFullUrl(voiceUrl);
                       if (!fullVoiceUrl) return null;
-                      return <VoicePlayer url={fullVoiceUrl} isOwn={isOwn} />;
+                      const transcriptObj = transcribedMessages?.[message.messageId];
+                      const transcriptText = typeof transcriptObj === 'string' ? transcriptObj : transcriptObj?.text;
+                      const isTranscribingVoice = Boolean(transcriptionLoading?.[message.messageId]);
+                      const isTranslatingVoice = Boolean(translationLoading?.[message.messageId]);
+                      const translatedVoiceText = translatedMessages?.[message.messageId];
+                      return (
+                        <View style={{ width: '100%' }}>
+                          <VoicePlayer url={fullVoiceUrl} isOwn={isOwn} />
+
+                          {/* Nút Chuyển thành chữ (Whisper STT) & Dịch */}
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                            {!transcriptText && (
+                              <TouchableOpacity
+                                onPress={() => onTranscribe?.(message.messageId)}
+                                disabled={isTranscribingVoice}
+                                style={[
+                                  styles.translateBtn,
+                                  {
+                                    backgroundColor: isOwn
+                                      ? 'rgba(255,255,255,0.18)'
+                                      : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(99, 102, 241, 0.08)'),
+                                  }
+                                ]}
+                              >
+                                {isTranscribingVoice ? (
+                                  <ActivityIndicator size="small" color={isOwn ? '#fff' : colors.primary} style={{ marginRight: 4 }} />
+                                ) : (
+                                  <MaterialIcons name="record-voice-over" size={12} color={isOwn ? '#fff' : colors.primary} style={{ marginRight: 4 }} />
+                                )}
+                                <Text style={[styles.translateBtnText, { color: isOwn ? '#fff' : colors.primary }]}>
+                                  {isTranscribingVoice ? (t('chat.transcribing') || 'Đang nhận diện...') : (t('chat.transcribe') || 'Biên dịch')}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+
+                            {!translatedVoiceText && !isTranslatingVoice && (
+                              <TouchableOpacity
+                                onPress={() => onTranslate?.(message.messageId)}
+                                style={[
+                                  styles.translateBtn,
+                                  {
+                                    backgroundColor: isOwn
+                                      ? 'rgba(255,255,255,0.18)'
+                                      : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(16, 185, 129, 0.1)'),
+                                  }
+                                ]}
+                              >
+                                <Ionicons name="sparkles-outline" size={11} color={isOwn ? '#fff' : '#10b981'} style={{ marginRight: 4 }} />
+                                <Text style={[styles.translateBtnText, { color: isOwn ? '#fff' : '#10b981' }]}>
+                                  {t('chat.translate_btn') || 'Dịch'}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+
+                          {/* Hiển thị Transcript */}
+                          {transcriptText && (
+                            <View style={[
+                              styles.translationContainer,
+                              { borderTopColor: isOwn ? 'rgba(255,255,255,0.2)' : colors.border }
+                            ]}>
+                              <View style={styles.translationHeader}>
+                                <View style={styles.translationHeaderLeft}>
+                                  <MaterialIcons name="subtitles" size={12} color={isOwn ? '#fff' : colors.primary} style={{ marginRight: 4 }} />
+                                  <Text style={[styles.translationTitle, { color: isOwn ? 'rgba(255,255,255,0.8)' : colors.textMuted }]}>
+                                    {t('chat.transcribe') || 'Nội dung thoại'}
+                                  </Text>
+                                </View>
+                              </View>
+                              <Text style={[
+                                styles.translatedText,
+                                isOwn ? styles.ownText : [styles.otherText, { color: colors.foreground }]
+                              ]}>
+                                {transcriptText}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* Trạng thái đang dịch voice */}
+                          {isTranslatingVoice && (
+                            <View style={[
+                              styles.translationLoadingContainer,
+                              { borderTopColor: isOwn ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.05)' }
+                            ]}>
+                              <ActivityIndicator size="small" color={isOwn ? '#fff' : colors.primary} style={{ marginRight: 6 }} />
+                              <Text style={[styles.translationLoadingText, { color: isOwn ? 'rgba(255,255,255,0.7)' : colors.textMuted }]}>
+                                {t('chat.ai_translating') || 'AI đang dịch...'}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* Hiển thị bản dịch của voice */}
+                          {translatedVoiceText && (
+                            <View style={[
+                              styles.translationContainer,
+                              { borderTopColor: isOwn ? 'rgba(255,255,255,0.2)' : colors.border }
+                            ]}>
+                              <View style={styles.translationHeader}>
+                                <View style={styles.translationHeaderLeft}>
+                                  <Ionicons name="sparkles" size={12} color={isOwn ? '#fff' : colors.primary} style={{ marginRight: 4 }} />
+                                  <Text style={[styles.translationTitle, { color: isOwn ? 'rgba(255,255,255,0.8)' : colors.textMuted }]}>
+                                    {t('chat.ai_translation') || 'Bản dịch AI'}
+                                  </Text>
+                                </View>
+                                <TouchableOpacity
+                                  onPress={() => onTranslate?.(message.messageId)}
+                                  style={styles.translationReloadBtn}
+                                >
+                                  <Ionicons name="refresh" size={12} color={isOwn ? 'rgba(255,255,255,0.7)' : colors.primary} />
+                                  <Text style={[styles.translationReloadText, { color: isOwn ? 'rgba(255,255,255,0.7)' : colors.primary }]}>
+                                    {t('chat.reload_translation') || 'Dịch lại'}
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                              <Text style={[
+                                styles.translatedText,
+                                isOwn ? styles.ownText : [styles.otherText, { color: colors.foreground }]
+                              ]}>
+                                {translatedVoiceText}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      );
                     }
                     if (message.type === 'CALL_LOG') {
                       try {
