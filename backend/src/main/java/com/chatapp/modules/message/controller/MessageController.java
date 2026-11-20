@@ -20,7 +20,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -297,37 +296,33 @@ public class MessageController {
 
     @PostMapping("/speech-to-text")
     public ResponseEntity<ApiResponse<Map<String, String>>> speechToText(
-            @RequestParam("file") MultipartFile file) {
-        String transcript = openAIWhisperService.transcribe(file);
-        return ResponseEntity.ok(ApiResponse.success(Map.of("transcript", transcript), "Speech-to-text success"));
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "language", required = false) String language) {
+        WhisperService.TranscriptionResult result = openAIWhisperService.transcribeWithMetadata(file, language);
+        return ResponseEntity.ok(ApiResponse.success(
+                Map.of(
+                        "transcript", result.text(),
+                        "language", result.language(),
+                        "nllbLanguage", result.nllbLanguage()
+                ),
+                "Speech-to-text success"));
     }
 
     @PostMapping("/speech-to-text-url")
-    public ResponseEntity<ApiResponse<Map<String, String>>> speechToTextFromUrl(@RequestParam("url") String url) {
+    public ResponseEntity<ApiResponse<Map<String, String>>> speechToTextFromUrl(
+            @RequestParam("url") String url,
+            @RequestParam(value = "language", required = false) String language) {
         try {
-            // Detect file extension from URL
-            String ext = ".wav";
-            String contentType = "audio/wav";
-            String lowerUrl = url.toLowerCase();
-            if (lowerUrl.contains(".webm")) { ext = ".webm"; contentType = "audio/webm"; }
-            else if (lowerUrl.contains(".mp3")) { ext = ".mp3"; contentType = "audio/mpeg"; }
-            else if (lowerUrl.contains(".m4a")) { ext = ".m4a"; contentType = "audio/m4a"; }
-            else if (lowerUrl.contains(".ogg")) { ext = ".ogg"; contentType = "audio/ogg"; }
-            else if (lowerUrl.contains(".mp4")) { ext = ".mp4"; contentType = "audio/mp4"; }
-
-            java.nio.file.Path tempFile = java.nio.file.Files.createTempFile("audio", ext);
-            try (java.io.InputStream in = new java.net.URL(url).openStream()) {
-                java.nio.file.Files.copy(in, tempFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            }
-            MultipartFile multipartFile = new MockMultipartFile(
-                    "audio" + ext,
-                    "audio" + ext,
-                    contentType,
-                    java.nio.file.Files.readAllBytes(tempFile));
-            String transcript = openAIWhisperService.transcribe(multipartFile);
-            java.nio.file.Files.deleteIfExists(tempFile);
-            return ResponseEntity.ok(ApiResponse.success(Map.of("transcript", transcript), "Speech-to-text success"));
+            WhisperService.TranscriptionResult result = openAIWhisperService.transcribeFromUrl(url, language);
+            return ResponseEntity.ok(ApiResponse.success(
+                    Map.of(
+                            "transcript", result.text(),
+                            "language", result.language(),
+                            "nllbLanguage", result.nllbLanguage()
+                    ),
+                    "Speech-to-text success"));
         } catch (Exception e) {
+            log.error("Speech-to-text from URL failed: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Speech-to-text failed: " + e.getMessage(), 500));
         }

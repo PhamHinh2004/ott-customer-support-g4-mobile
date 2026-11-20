@@ -102,6 +102,24 @@ export const chatApi = {
     axiosClient.post(`/messages/${messageId}/translate`, { conversationId, srcLang, tgtLang }),
   translateMessagesBatch: (conversationId, messageIds, srcLang, tgtLang) =>
     axiosClient.post('/messages/translate-batch', { conversationId, messageIds, srcLang, tgtLang }),
+  transcribeVoiceUrl: (url, language = null) =>
+    axiosClient.post('/messages/speech-to-text-url', null, {
+      params: language ? { url, language } : { url },
+    }),
+  transcribeVoiceFile: (file, language = null) => {
+    const formData = new FormData();
+    formData.append('file', {
+      uri: Platform.OS === 'android' ? file.uri : file.uri.replace('file://', ''),
+      type: file.type || 'audio/mp4',
+      name: file.name || 'voice.m4a',
+    });
+    if (language) {
+      formData.append('language', language);
+    }
+    return axiosClient.post('/messages/speech-to-text', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 /**

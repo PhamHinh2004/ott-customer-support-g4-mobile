@@ -150,6 +150,9 @@ const MessageModal = ({ visible, message, onClose, onAction, onReact, isOwn, isP
                   <MenuButton icon="arrow-forward" label={t('chat.forward')} type="forward" color="#3b82f6" />
                 )}
                 <MenuButton icon="content-copy" label={t('common.copy', 'Sao chép')} type="copy" color="#64748b" />
+                {(message.type === 'VOICE' || message.type === 'AUDIO') && (
+                  <MenuButton icon="record-voice-over" label={t('chat.transcribe')} type="transcribe" color="#6366f1" />
+                )}
                 <MenuButton icon="g-translate" label={t('chat.translate_btn')} type="translate" color="#10b981" />
 
                 {/* Row 2: Management & Tools */}

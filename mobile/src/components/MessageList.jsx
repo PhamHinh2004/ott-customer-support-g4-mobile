@@ -33,6 +33,9 @@ const MessageList = React.forwardRef(({
   translatedMessages = {},
   translationLoading = {},
   onTranslate,
+  transcribedMessages = {},
+  transcriptionLoading = {},
+  onTranscribe,
 }, ref) => {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -239,6 +242,9 @@ const MessageList = React.forwardRef(({
           translatedMessages={translatedMessages}
           translationLoading={translationLoading}
           onTranslate={onTranslate}
+          transcribedMessages={transcribedMessages}
+          transcriptionLoading={transcriptionLoading}
+          onTranscribe={onTranscribe}
         />
 
       </View>
