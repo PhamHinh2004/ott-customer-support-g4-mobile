@@ -2,7 +2,7 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { PermissionsAndroid, Platform, Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Audio } from 'expo-av';
+import { createAudioPlayer } from 'expo-audio';
 import { requestCameraPermissionsAsync, requestMicrophonePermissionsAsync } from 'expo-camera';
 import { onCallSignal, offCallSignal, emitCallSignal } from '../utils/socket';
 import { callApi } from '../api/callApi';
@@ -178,8 +178,8 @@ export const useAgoraCall = (activeConversationId = null, activeConversation = n
             try {
                 const s = soundRef.current;
                 soundRef.current = null;
-                await s.stopAsync().catch(() => { });
-                await s.unloadAsync().catch(() => { });
+                s.pause();
+                s.remove();
                 console.log('🔊 [useAgoraCall] Sound stopped and unloaded');
             } catch (e) {
                 console.warn('🔊 [useAgoraCall] stopSound error:', e);
@@ -232,14 +232,14 @@ export const useAgoraCall = (activeConversationId = null, activeConversation = n
 
                     if (!file) return;
 
-                    const { sound } = await Audio.Sound.createAsync(
-                        file,
-                        { isLooping: true, shouldPlay: true, volume: 1.0 }
-                    );
+                    const sound = createAudioPlayer(file);
+                    sound.loop = true;
+                    sound.volume = 1.0;
+                    sound.play();
 
                     if (!isActive) {
-                        await sound.stopAsync().catch(() => { });
-                        await sound.unloadAsync().catch(() => { });
+                        sound.pause();
+                        sound.remove();
                         return;
                     }
 

@@ -9,9 +9,30 @@ import {
   FlatList
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Video } from 'expo-av';
+import { useVideoPlayer, VideoView } from 'expo-video';
 
 const { width, height } = Dimensions.get('window');
+
+const MediaVideo = ({ uri, shouldPlay }) => {
+  const player = useVideoPlayer(uri);
+
+  useEffect(() => {
+    if (shouldPlay) {
+      player.play();
+    } else {
+      player.pause();
+    }
+  }, [player, shouldPlay]);
+
+  return (
+    <VideoView
+      player={player}
+      contentFit="contain"
+      nativeControls
+      style={styles.mediaVideo}
+    />
+  );
+};
 
 const MediaViewer = ({ visible, onClose, allMedia = [], initialIndex = 0 }) => {
   const flatListRef = useRef(null);
@@ -45,16 +66,7 @@ const MediaViewer = ({ visible, onClose, allMedia = [], initialIndex = 0 }) => {
     return (
       <View style={styles.slide}>
         {isVideo ? (
-          <Video
-            source={{ uri: item.url }}
-            rate={1.0}
-            volume={1.0}
-            isMuted={false}
-            resizeMode="contain"
-            shouldPlay={visible && isCurrent} // Chỉ phát khi modal mở và là slide hiện tại
-            useNativeControls
-            style={styles.mediaVideo}
-          />
+          <MediaVideo uri={item.url} shouldPlay={visible && isCurrent} />
         ) : (
           <Image 
             source={{ uri: item.url }} 

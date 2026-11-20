@@ -26,7 +26,13 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { mediaApi } from '../api/chatApi';
 import CONFIG from '../config';
-import { Audio } from 'expo-av';
+import {
+  getRecordingPermissionsAsync,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from 'expo-audio';
 import PermissionModal from './common/PermissionModal';
 import { useTheme } from '../context/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -73,7 +79,8 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
 
 
   // Voice recording state
-  const [recording, setRecording] = useState(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const [recording, setRecording] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const recordingIntervalRef = useRef(null);
@@ -407,44 +414,20 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
 
   const startRecording = async () => {
     try {
-      const granted = await requestPermission('mic', () => Audio.requestPermissionsAsync());
+      const granted = await requestPermission('mic', requestRecordingPermissionsAsync);
       if (!granted) return;
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        interruptionMode: 'duckOthers',
+        shouldRouteThroughEarpiece: false,
       });
 
-      // Explicit options for m4a (AAC)
-      const recordingOptions = {
-        android: {
-          extension: '.m4a',
-          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-          audioEncoder: Audio.AndroidAudioEncoder.AAC,
-          sampleRate: 44100,
-          numberOfChannels: 2,
-          bitRate: 128000,
-        },
-        ios: {
-          extension: '.m4a',
-          outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-          audioQuality: Audio.IOSAudioQuality.HIGH,
-          sampleRate: 44100,
-          numberOfChannels: 1,
-          bitRate: 128000,
-        },
-        web: {
-          mimeType: 'audio/webm',
-          bitsPerSecond: 128000,
-        },
-      };
-
-      const { recording } = await Audio.Recording.createAsync(recordingOptions);
-
-      setRecording(recording);
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      setRecording(true);
       setIsRecording(true);
       setRecordingDuration(0);
 
@@ -462,9 +445,9 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
     try {
       if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
       setIsRecording(false);
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecording(null);
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
+      setRecording(false);
 
       // Upload and send
       if (uri) {
@@ -500,8 +483,8 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
     if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
     try {
       setIsRecording(false);
-      await recording.stopAndUnloadAsync();
-      setRecording(null);
+      await audioRecorder.stop();
+      setRecording(false);
     } catch (err) {
       console.error('Failed to cancel recording', err);
     }
@@ -622,7 +605,7 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
     let checkFunc;
     if (type === 'camera') checkFunc = () => ImagePicker.getCameraPermissionsAsync();
     else if (type === 'gallery') checkFunc = () => ImagePicker.getMediaLibraryPermissionsAsync();
-    else if (type === 'mic') checkFunc = () => Audio.getPermissionsAsync();
+    else if (type === 'mic') checkFunc = getRecordingPermissionsAsync;
 
     console.log(`[Permission] Requesting ${type}...`);
     if (checkFunc) {

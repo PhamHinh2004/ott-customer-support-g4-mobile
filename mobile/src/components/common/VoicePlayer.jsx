@@ -1,87 +1,48 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
-import { Audio } from 'expo-av';
+import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { MaterialIcons } from '@expo/vector-icons';
 
 const VoicePlayer = ({ url, isOwn }) => {
-  const [sound, setSound] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [position, setPosition] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
+  const player = useAudioPlayer(url);
+  const status = useAudioPlayerStatus(player);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
-    };
-  }, [sound]);
-
-  const onPlaybackStatusUpdate = (status) => {
-    if (status.isLoaded) {
-      setPosition(status.positionMillis);
-      setDuration(status.durationMillis);
-      setIsPlaying(status.isPlaying);
-      if (status.didJustFinish) {
-        setIsPlaying(false);
-        setPosition(0);
-        // Note: we don't call sound.setPositionAsync(0) here to avoid null ref errors.
-        // It will be reset on the next play call.
-      }
+    if (status.playbackState === 'error') {
+      setError('Không thể phát âm thanh này');
     }
-  };
+  }, [status.playbackState]);
+
+  const isPlaying = status.playing;
+  const duration = status.duration * 1000;
+  const position = (status.didJustFinish ? 0 : status.currentTime) * 1000;
+  const isLoading = !status.isLoaded && !error;
 
   const playPauseSound = async () => {
     try {
-      // Đảm bảo Audio Mode được thiết lập đúng cho iOS
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
+      setError(null);
+      await setAudioModeAsync({
+        allowsRecording: false,
+        shouldPlayInBackground: true,
+        playsInSilentMode: true,
+        interruptionMode: 'duckOthers',
+        shouldRouteThroughEarpiece: false,
       });
 
-      if (sound === null) {
-        setIsLoading(true);
-        console.log('Loading sound from:', url);
-        
-        const newSound = new Audio.Sound();
-        setSound(newSound);
-
-        newSound.setOnPlaybackStatusUpdate(onPlaybackStatusUpdate);
-
-        await newSound.loadAsync(
-          { uri: url },
-          { shouldPlay: true },
-          true // useNativeControls
-        );
-        
-        setIsLoading(false);
+      if (isPlaying) {
+        player.pause();
       } else {
-        const status = await sound.getStatusAsync();
-        if (!status.isLoaded) {
-          // If sound exists but is not loaded, reset and try reloading
-          setSound(null);
-          return playPauseSound();
+        if (status.duration > 0 && status.currentTime >= status.duration) {
+          await player.seekTo(0);
         }
-
-        if (isPlaying) {
-          await sound.pauseAsync();
-        } else {
-          if (position >= duration) {
-            await sound.setPositionAsync(0);
-          }
-          await sound.playAsync();
-        }
+        player.play();
       }
     } catch (error) {
       console.error('Error playing sound detailed:', error);
-      setIsLoading(false);
-      
+
       let errorMsg = 'Không thể phát âm thanh này';
-      if (Platform.OS === 'ios' && url.toLowerCase().endsWith('.webm')) {
+      if (Platform.OS === 'ios' && url?.toLowerCase().endsWith('.webm')) {
         errorMsg = 'Định dạng WebM không hỗ trợ trên iOS';
       } else if (error.message) {
         if (error.message.includes('code -11828')) {
@@ -93,8 +54,6 @@ const VoicePlayer = ({ url, isOwn }) => {
       setError(errorMsg);
     }
   };
-
-  const [error, setError] = useState(null);
 
   const formatTime = (millis) => {
     const totalSeconds = millis / 1000;
