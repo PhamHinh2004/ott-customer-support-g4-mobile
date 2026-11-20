@@ -119,14 +119,21 @@ const EditProfileScreen = () => {
 
       // Cập nhật Redux Store
       const refreshToken = await getStorageItem('refreshToken');
+      const mergedUser = {
+        ...user,
+        ...updatedUser,
+        preferredLanguage: updatedUser.preferredLanguage !== undefined
+          ? (updatedUser.preferredLanguage || null)
+          : (user?.preferredLanguage ?? null),
+      };
       dispatch(restoreState({
-        user: updatedUser,
+        user: mergedUser,
         accessToken: currentToken,
         refreshToken: refreshToken,
       }));
 
       // Lưu vào máy
-      await setStorageItem('user', JSON.stringify(updatedUser));
+      await setStorageItem('user', JSON.stringify(mergedUser));
 
       Alert.alert(t('common.success'), t('profile.update_success'), [
         {

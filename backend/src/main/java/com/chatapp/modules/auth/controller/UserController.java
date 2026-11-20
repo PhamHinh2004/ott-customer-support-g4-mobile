@@ -85,16 +85,18 @@ public class UserController {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ValidationException("User not found"));
 
-        return ResponseEntity.ok(ApiResponse.success(Map.of(
-                "userId", user.getUserId(),
-                "phoneNumber", user.getPhoneNumber(),
-                "firstName", user.getFirstName(),
-                "lastName", user.getLastName(),
-                "fullName", user.getFullName(),
-                "email", user.getEmail() == null ? "" : user.getEmail(),
-                "bio", user.getBio() == null ? "" : user.getBio(),
-                "avatarUrl", user.getAvatarUrl() == null ? "" : user.getAvatarUrl()
-        ), "Profile fetched successfully"));
+        Map<String, Object> data = new java.util.HashMap<>();
+        data.put("userId", user.getUserId());
+        data.put("phoneNumber", user.getPhoneNumber());
+        data.put("firstName", user.getFirstName());
+        data.put("lastName", user.getLastName());
+        data.put("fullName", user.getFullName());
+        data.put("email", user.getEmail() == null ? "" : user.getEmail());
+        data.put("bio", user.getBio() == null ? "" : user.getBio());
+        data.put("avatarUrl", user.getAvatarUrl() == null ? "" : user.getAvatarUrl());
+        data.put("preferredLanguage", user.getPreferredLanguage() == null ? "" : user.getPreferredLanguage());
+
+        return ResponseEntity.ok(ApiResponse.success(data, "Profile fetched successfully"));
     }
 
     @PutMapping("/me")
@@ -168,6 +170,7 @@ public class UserController {
         data.put("email", user.getEmail() != null ? user.getEmail() : "");
         data.put("bio", user.getBio() != null ? user.getBio() : "");
         data.put("avatarUrl", user.getAvatarUrl() != null ? user.getAvatarUrl() : "");
+        data.put("preferredLanguage", user.getPreferredLanguage() != null ? user.getPreferredLanguage() : "");
 
         return ResponseEntity.ok(ApiResponse.success(data, "Profile updated successfully"));
     }

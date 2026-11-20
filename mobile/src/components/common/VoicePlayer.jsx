@@ -1,23 +1,47 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
-import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { MaterialIcons } from '@expo/vector-icons';
 
 const VoicePlayer = ({ url, isOwn }) => {
-  const player = useAudioPlayer(url);
-  const status = useAudioPlayerStatus(player);
+  const [hasLoadedSource, setHasLoadedSource] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (status.playbackState === 'error') {
-      setError('Không thể phát âm thanh này');
-    }
-  }, [status.playbackState]);
+  const player = useAudioPlayer(null, { updateInterval: 200 });
+  const status = useAudioPlayerStatus(player);
 
-  const isPlaying = status.playing;
-  const duration = status.duration * 1000;
-  const position = (status.didJustFinish ? 0 : status.currentTime) * 1000;
-  const isLoading = !status.isLoaded && !error;
+  const isPlaying = Boolean(status?.playing);
+  const duration = (status?.duration || 0) * 1000;
+  const position = (status?.currentTime || 0) * 1000;
+
+  useEffect(() => {
+    try {
+      player.pause();
+    } catch {}
+    setHasLoadedSource(false);
+    setIsLoading(false);
+    setError(null);
+  }, [url, player]);
+
+  useEffect(() => {
+    if (!hasLoadedSource) return;
+    if (status?.isLoaded || status?.error) {
+      setIsLoading(false);
+    }
+    if (status?.error) {
+      const msg = String(status.error);
+      let errorMsg = 'Không thể phát âm thanh này';
+      if (Platform.OS === 'ios' && url?.toLowerCase().endsWith('.webm')) {
+        errorMsg = 'Định dạng WebM không hỗ trợ trên iOS';
+      } else if (msg.includes('code -11828')) {
+        errorMsg = 'Định dạng tệp không được hỗ trợ';
+      } else if (msg.includes('code -1003')) {
+        errorMsg = 'Lỗi kết nối máy chủ';
+      }
+      setError(errorMsg);
+    }
+  }, [hasLoadedSource, status?.isLoaded, status?.error, url]);
 
   const playPauseSound = async () => {
     try {
@@ -26,28 +50,40 @@ const VoicePlayer = ({ url, isOwn }) => {
         allowsRecording: false,
         shouldPlayInBackground: true,
         playsInSilentMode: true,
-        interruptionMode: 'duckOthers',
-        shouldRouteThroughEarpiece: false,
       });
+
+      if (!hasLoadedSource) {
+        if (Platform.OS === 'ios' && url?.toLowerCase().endsWith('.webm')) {
+          setError('Định dạng WebM không hỗ trợ trên iOS');
+          return;
+        }
+        setIsLoading(true);
+        setHasLoadedSource(true);
+        player.replace(url);
+        player.play();
+        setIsLoading(false);
+        return;
+      }
 
       if (isPlaying) {
         player.pause();
       } else {
-        if (status.duration > 0 && status.currentTime >= status.duration) {
+        if (status?.didJustFinish || (duration > 0 && position >= duration - 100)) {
           await player.seekTo(0);
         }
         player.play();
       }
-    } catch (error) {
-      console.error('Error playing sound detailed:', error);
+    } catch (err) {
+      console.error('Error playing sound detailed:', err);
+      setIsLoading(false);
 
       let errorMsg = 'Không thể phát âm thanh này';
       if (Platform.OS === 'ios' && url?.toLowerCase().endsWith('.webm')) {
         errorMsg = 'Định dạng WebM không hỗ trợ trên iOS';
-      } else if (error.message) {
-        if (error.message.includes('code -11828')) {
+      } else if (err?.message) {
+        if (err.message.includes('code -11828')) {
           errorMsg = 'Định dạng tệp không được hỗ trợ';
-        } else if (error.message.includes('code -1003')) {
+        } else if (err.message.includes('code -1003')) {
           errorMsg = 'Lỗi kết nối máy chủ';
         }
       }

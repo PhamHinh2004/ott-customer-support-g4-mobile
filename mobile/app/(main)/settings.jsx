@@ -1,20 +1,25 @@
 import React from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  SafeAreaView, Switch,
+  Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/context/ThemeContext';
+import { getLanguageOption } from '../../src/utils/languageConfig';
 
 const SettingsScreen = () => {
   const { colors, isDark, toggleTheme } = useTheme();
   const router = useRouter();
   const { t } = useTranslation();
+  const user = useSelector((state) => state.auth.user);
+  const currentLangOption = getLanguageOption(user?.preferredLanguage);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right', 'bottom']}>
       <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity
           style={[styles.backBtn, { backgroundColor: isDark ? colors.surface300 : '#f1f5f9' }]}
@@ -51,13 +56,18 @@ const SettingsScreen = () => {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => router.push('/language-settings')}
+              onPress={() => router.push('/(main)/language-settings')}
             >
               <View style={styles.menuItemLeft}>
                 <Ionicons name="language-outline" size={20} color="#3b82f6" />
                 <Text style={[styles.menuItemText, { color: colors.foreground }]}>{t('settings.language_title')}</Text>
               </View>
-              <MaterialIcons name="chevron-right" size={20} color={colors.textSubtle} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 13, color: colors.textSubtle }}>
+                  {currentLangOption ? `${currentLangOption.flag} ${currentLangOption.label}` : t('settings.disable_auto_translate')}
+                </Text>
+                <MaterialIcons name="chevron-right" size={20} color={colors.textSubtle} />
+              </View>
             </TouchableOpacity>
           </View>
         </View>

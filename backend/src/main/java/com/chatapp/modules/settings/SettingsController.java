@@ -39,7 +39,9 @@ public class SettingsController {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ValidationException("User not found"));
 
-        user.setPreferredLanguage(body.get("preferredLanguage")); // null = tắt dịch
+        String rawLang = body.get("preferredLanguage");
+        String normalizedLang = (rawLang == null || rawLang.trim().isEmpty()) ? "" : rawLang.trim();
+        user.setPreferredLanguage(normalizedLang); // "" = tắt dịch (DynamoDBMapper SaveBehavior.UPDATE bỏ qua null)
         user.setUpdatedAt(System.currentTimeMillis());
         userRepository.save(user);
 

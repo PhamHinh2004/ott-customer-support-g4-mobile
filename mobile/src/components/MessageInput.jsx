@@ -80,7 +80,6 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
 
   // Voice recording state
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const [recording, setRecording] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const recordingIntervalRef = useRef(null);
@@ -414,7 +413,7 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
 
   const startRecording = async () => {
     try {
-      const granted = await requestPermission('mic', requestRecordingPermissionsAsync);
+      const granted = await requestPermission('mic', () => requestRecordingPermissionsAsync());
       if (!granted) return;
 
       await setAudioModeAsync({
@@ -427,7 +426,7 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
 
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
-      setRecording(true);
+
       setIsRecording(true);
       setRecordingDuration(0);
 
@@ -440,14 +439,17 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
   };
 
   const stopRecording = async () => {
-    if (!recording) return;
+    if (!isRecording && !audioRecorder.isRecording) return;
 
     try {
       if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
       setIsRecording(false);
       await audioRecorder.stop();
       const uri = audioRecorder.uri;
-      setRecording(false);
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      }).catch(() => {});
 
       // Upload and send
       if (uri) {
@@ -479,12 +481,15 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
   };
 
   const cancelRecording = async () => {
-    if (!recording) return;
+    if (!isRecording && !audioRecorder.isRecording) return;
     if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
     try {
       setIsRecording(false);
       await audioRecorder.stop();
-      setRecording(false);
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      }).catch(() => {});
     } catch (err) {
       console.error('Failed to cancel recording', err);
     }
@@ -605,7 +610,7 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
     let checkFunc;
     if (type === 'camera') checkFunc = () => ImagePicker.getCameraPermissionsAsync();
     else if (type === 'gallery') checkFunc = () => ImagePicker.getMediaLibraryPermissionsAsync();
-    else if (type === 'mic') checkFunc = getRecordingPermissionsAsync;
+    else if (type === 'mic') checkFunc = () => getRecordingPermissionsAsync();
 
     console.log(`[Permission] Requesting ${type}...`);
     if (checkFunc) {

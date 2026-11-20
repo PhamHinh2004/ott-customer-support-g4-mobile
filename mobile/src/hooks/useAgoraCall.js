@@ -2,7 +2,7 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { PermissionsAndroid, Platform, Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { createAudioPlayer } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { requestCameraPermissionsAsync, requestMicrophonePermissionsAsync } from 'expo-camera';
 import { onCallSignal, offCallSignal, emitCallSignal } from '../utils/socket';
 import { callApi } from '../api/callApi';
@@ -176,10 +176,10 @@ export const useAgoraCall = (activeConversationId = null, activeConversation = n
     const stopSound = async () => {
         if (soundRef.current) {
             try {
-                const s = soundRef.current;
+                const player = soundRef.current;
                 soundRef.current = null;
-                s.pause();
-                s.remove();
+                player.pause();
+                player.remove();
                 console.log('🔊 [useAgoraCall] Sound stopped and unloaded');
             } catch (e) {
                 console.warn('🔊 [useAgoraCall] stopSound error:', e);
@@ -232,18 +232,24 @@ export const useAgoraCall = (activeConversationId = null, activeConversation = n
 
                     if (!file) return;
 
-                    const sound = createAudioPlayer(file);
-                    sound.loop = true;
-                    sound.volume = 1.0;
-                    sound.play();
+                    await setAudioModeAsync({
+                        playsInSilentMode: true,
+                        shouldPlayInBackground: true,
+                        allowsRecording: false,
+                    }).catch(() => { });
+
+                    const player = createAudioPlayer(file);
+                    player.loop = true;
+                    player.volume = 1.0;
 
                     if (!isActive) {
-                        sound.pause();
-                        sound.remove();
+                        player.pause();
+                        player.remove();
                         return;
                     }
 
-                    soundRef.current = sound;
+                    player.play();
+                    soundRef.current = player;
                 } catch (e) {
                     console.warn('🔊 [useAgoraCall] Sound error:', e);
                 }

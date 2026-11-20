@@ -1,10 +1,10 @@
 import React, { useRef, useEffect } from 'react';
-import { 
-  Modal, 
-  View, 
-  TouchableOpacity, 
-  Image, 
-  StyleSheet, 
+import {
+  Modal,
+  View,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
   Dimensions,
   FlatList
 } from 'react-native';
@@ -13,10 +13,13 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 
 const { width, height } = Dimensions.get('window');
 
-const MediaVideo = ({ uri, shouldPlay }) => {
-  const player = useVideoPlayer(uri);
+const VideoSlide = ({ url, shouldPlay }) => {
+  const player = useVideoPlayer(url, (videoPlayer) => {
+    videoPlayer.loop = false;
+  });
 
   useEffect(() => {
+    if (!player) return;
     if (shouldPlay) {
       player.play();
     } else {
@@ -66,12 +69,12 @@ const MediaViewer = ({ visible, onClose, allMedia = [], initialIndex = 0 }) => {
     return (
       <View style={styles.slide}>
         {isVideo ? (
-          <MediaVideo uri={item.url} shouldPlay={visible && isCurrent} />
+          <VideoSlide url={item.url} shouldPlay={visible && isCurrent} />
         ) : (
-          <Image 
-            source={{ uri: item.url }} 
-            style={styles.mediaImage} 
-            resizeMode="contain" 
+          <Image
+            source={{ uri: item.url }}
+            style={styles.mediaImage}
+            resizeMode="contain"
           />
         )}
       </View>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Keyboard, Platform, Image, ActivityIndicator, Alert, ImageBackground, DeviceEventEmitter } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Keyboard, Platform, Image, ActivityIndicator, Alert, ImageBackground, DeviceEventEmitter, Modal, TouchableWithoutFeedback } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialIcons, Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
@@ -8,8 +8,10 @@ import MessageList from '../../../src/components/MessageList';
 import MessageInput from '../../../src/components/MessageInput';
 import MessageModal from '../../../src/components/MessageModal';
 import { fetchMessages, fetchConversationDetail, sendMessage, setCurrentConversation, clearCurrentConversation, getRealId, fetchConversations, setReplyingTo, clearReplyingTo, toggleMessageReaction, markConversationRead, recallMessage, deleteMessage, pinMessage, unpinMessage, updateMemberFriendshipStatus } from '../../../src/store/chatSlice';
+import { updateUser } from '../../../src/store/authSlice';
 import { useWebSocket } from '../../../src/hooks/useWebSocket';
 import { conversationApi, chatApi } from '../../../src/api/chatApi';
+import axiosClient from '../../../src/api/axiosClient';
 import { friendApi } from '../../../src/api/friendApi';
 import CreateVoteModal from '../../../src/components/CreateVoteModal';
 import { formatLastSeen } from '../../../src/utils/dateUtils';
@@ -17,13 +19,20 @@ import ForwardModal from '../../../src/components/ForwardModal';
 import { useAgoraCall } from '../../../src/hooks/useAgoraCall';
 import CallCountdownModal from '../../../src/components/CallCountdownModal';
 import { useTheme } from '../../../src/context/ThemeContext';
+import {
+  TRANSLATION_LANGUAGES,
+  LANGUAGE_MAP,
+  detectMessageLanguage,
+  getLanguageOption,
+  normalizePreferredLanguage,
+} from '../../../src/utils/languageConfig';
 
 
 
 import { useTranslation } from 'react-i18next';
 
 const ChatDetailScreen = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -59,6 +68,8 @@ const ChatDetailScreen = () => {
   const [localFriendship, setLocalFriendship] = useState(null);
   const [translatedMessages, setTranslatedMessages] = useState({});
   const [translationLoading, setTranslationLoading] = useState({});
+  const [langModalVisible, setLangModalVisible] = useState(false);
+  const [savingLang, setSavingLang] = useState(false);
 
   useEffect(() => {
     setTranslatedMessages({});
@@ -73,7 +84,12 @@ const ChatDetailScreen = () => {
 
   const chatState = useSelector((state) => state.chat);
   const currentUser = useSelector((state) => state.auth.user);
+  const preferredLanguage = normalizePreferredLanguage(currentUser?.preferredLanguage);
   const conversations = chatState.conversations || [];
+
+  useEffect(() => {
+    setTranslatedMessages({});
+  }, [preferredLanguage]);
 
   // Xác định ID chuẩn
   const realId = useMemo(() => getRealId(chatState, conversationId, currentUser?.userId || currentUser?.id), [chatState, conversationId, currentUser]);
@@ -636,18 +652,20 @@ const ChatDetailScreen = () => {
     setModalVisible(true);
   };
 
-  const handleTranslate = async (messageId) => {
+  const handleTranslate = async (messageId, overrideTargetLang = null) => {
     const msg = messages.find(m => m.messageId === messageId);
     if (!msg || !msg.content) return;
 
-    const tgtLang = currentUser?.preferredLanguage || 'vie_Latn';
-    const srcLang = msg.language || 'vie_Latn';
+    const tgtLang = normalizePreferredLanguage(overrideTargetLang) || preferredLanguage || 'vie_Latn';
+    const srcLang = detectMessageLanguage(msg.content, msg.language, tgtLang);
 
     setTranslationLoading(prev => ({ ...prev, [messageId]: true }));
     try {
       const res = await chatApi.translateMessage(messageId, realId, srcLang, tgtLang);
-      const translatedText = res.data?.data?.translated || res.data?.translated;
-      setTranslatedMessages(prev => ({ ...prev, [messageId]: translatedText }));
+      const translatedText = res?.data?.translated || res?.translated;
+      if (translatedText) {
+        setTranslatedMessages(prev => ({ ...prev, [messageId]: translatedText }));
+      }
     } catch (err) {
       console.error("Translation failed:", err);
       Alert.alert(
@@ -656,6 +674,30 @@ const ChatDetailScreen = () => {
       );
     } finally {
       setTranslationLoading(prev => ({ ...prev, [messageId]: false }));
+    }
+  };
+
+  const handleSelectTranslationLanguage = async (code) => {
+    if (savingLang) return;
+    setSavingLang(true);
+    try {
+      await axiosClient.put('/settings/language', { preferredLanguage: code });
+      const normalized = normalizePreferredLanguage(code);
+      dispatch(updateUser({ preferredLanguage: normalized }));
+      if (normalized) {
+        const i18nCode = LANGUAGE_MAP[normalized] || 'en';
+        i18n.changeLanguage(i18nCode);
+      }
+      setTranslatedMessages({});
+      setLangModalVisible(false);
+    } catch (err) {
+      console.error('Failed to update translation language:', err);
+      Alert.alert(
+        t('common.error') || 'Lỗi',
+        err?.response?.data?.message || err?.message || 'Không thể lưu ngôn ngữ dịch.'
+      );
+    } finally {
+      setSavingLang(false);
     }
   };
 
@@ -799,6 +841,12 @@ const ChatDetailScreen = () => {
           </TouchableOpacity>
 
           <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.headerActionButton}
+              onPress={() => setLangModalVisible(true)}
+            >
+              <Ionicons name="language-outline" size={22} color={preferredLanguage ? '#10b981' : colors.primary} />
+            </TouchableOpacity>
             {!isAI && (
               <>
                 <TouchableOpacity style={styles.headerActionButton} onPress={() => handleStartCall('audio')}>
@@ -1132,6 +1180,71 @@ const ChatDetailScreen = () => {
           callType={callType}
           onCancel={cancelCountdown}
         />
+
+        <Modal
+          visible={langModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setLangModalVisible(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setLangModalVisible(false)}>
+            <View style={styles.langModalOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={[styles.langModalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={[styles.langModalHeader, { borderBottomColor: colors.border }]}>
+                    <Text style={[styles.langModalTitle, { color: colors.foreground }]}>
+                      {t('settings.language_title')}
+                    </Text>
+                    <TouchableOpacity onPress={() => setLangModalVisible(false)} style={{ padding: 4 }}>
+                      <Ionicons name="close" size={22} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.langOptionRow, { borderBottomColor: colors.border }]}
+                    onPress={() => handleSelectTranslationLanguage(null)}
+                    disabled={savingLang}
+                  >
+                    <View style={styles.langOptionLeft}>
+                      <Text style={styles.langOptionFlag}>🚫</Text>
+                      <Text style={[styles.langOptionLabel, { color: colors.foreground }]}>
+                        {t('settings.disable_auto_translate')}
+                      </Text>
+                    </View>
+                    {!preferredLanguage && (
+                      <Ionicons name="checkmark-circle" size={22} color="#10b981" />
+                    )}
+                  </TouchableOpacity>
+
+                  {TRANSLATION_LANGUAGES.map((lang) => (
+                    <TouchableOpacity
+                      key={lang.code}
+                      style={[styles.langOptionRow, { borderBottomColor: colors.border }]}
+                      onPress={() => handleSelectTranslationLanguage(lang.code)}
+                      disabled={savingLang}
+                    >
+                      <View style={styles.langOptionLeft}>
+                        <Text style={styles.langOptionFlag}>{lang.flag}</Text>
+                        <Text style={[styles.langOptionLabel, { color: colors.foreground }]}>
+                          {lang.label}
+                        </Text>
+                      </View>
+                      {preferredLanguage === lang.code && (
+                        <Ionicons name="checkmark-circle" size={22} color="#10b981" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+
+                  {savingLang && (
+                    <View style={{ paddingVertical: 10, alignItems: 'center' }}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    </View>
+                  )}
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
       </View>
   );
 };
@@ -1488,6 +1601,52 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 1.5,
+  },
+  langModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  langModalCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  langModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  langModalTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  langOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  langOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  langOptionFlag: {
+    fontSize: 20,
+  },
+  langOptionLabel: {
+    fontSize: 15,
+    fontWeight: '500',
   },
 });
 

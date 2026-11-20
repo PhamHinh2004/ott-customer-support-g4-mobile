@@ -44,12 +44,19 @@ const ProfileScreen = () => {
       const refreshToken = await getStorageItem('refreshToken');
 
       if (updatedUser) {
+        const mergedUser = {
+          ...user,
+          ...updatedUser,
+          preferredLanguage: updatedUser.preferredLanguage !== undefined
+            ? (updatedUser.preferredLanguage || null)
+            : (user?.preferredLanguage ?? null),
+        };
         dispatch(restoreState({
-          user: updatedUser,
+          user: mergedUser,
           accessToken: token,
           refreshToken: refreshToken,
         }));
-        await setStorageItem('user', JSON.stringify(updatedUser));
+        await setStorageItem('user', JSON.stringify(mergedUser));
       }
     } catch (error) {
       // Bỏ qua log error nếu là 401 vì đã được xử lý toàn cục ở axiosClient

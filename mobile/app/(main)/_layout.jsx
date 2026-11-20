@@ -137,6 +137,7 @@ export default function MainLayout() {
       <Tabs.Screen name="group-preview" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
       <Tabs.Screen name="my-cloud" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
       <Tabs.Screen name="settings" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
+      <Tabs.Screen name="language-settings" options={{ tabBarTransparent: true, tabBarStyle: { display: 'none', position: 'absolute' } }} />
       </Tabs>
 
       <VideoCall
@@ -182,6 +183,7 @@ const CustomTabBar = ({ state, descriptors, emitter, navigateToTab, badge }) => 
     'edit-profile': 'profile',
     'change-password': 'profile',
     'settings': 'profile',
+    'language-settings': 'profile',
     // Thêm các ánh xạ khác nếu cần
   };
 

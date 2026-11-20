@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
-    "start": "expo start",
-    "start:lan": "expo start --go --lan",
-    "start:tunnel": "expo start --go --tunnel ngrok",
+    "start": "node scripts/start-expo.js",
+    "start:lan": "node scripts/start-expo.js --lan",
+    "start:tunnel": "node scripts/start-expo.js --tunnel ngrok",
+    "start:clear": "node scripts/start-expo.js --clear",
     "test": "vitest run",
     "android": "expo run:android",
     "build": "eas build --platform android",

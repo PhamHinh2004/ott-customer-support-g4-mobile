@@ -28,7 +28,8 @@ export const loginUser = createAsyncThunk(
            phoneNumber: responseData.phoneNumber,
            firstName: responseData.firstName,
            lastName: responseData.lastName,
-           avatarUrl: responseData.avatarUrl
+           avatarUrl: responseData.avatarUrl,
+           preferredLanguage: responseData.preferredLanguage || null
         }));
       } else {
         localStorage.setItem('accessToken', accessToken);
@@ -37,11 +38,12 @@ export const loginUser = createAsyncThunk(
           localStorage.setItem('sessionId', sessionId);
         }
         localStorage.setItem('user', JSON.stringify({
-           userId: response.data.userId,
-           phoneNumber: response.data.phoneNumber,
-           firstName: response.data.firstName,
-           lastName: response.data.lastName,
-           avatarUrl: response.data.avatarUrl
+           userId: responseData.userId,
+           phoneNumber: responseData.phoneNumber,
+           firstName: responseData.firstName,
+           lastName: responseData.lastName,
+           avatarUrl: responseData.avatarUrl,
+           preferredLanguage: responseData.preferredLanguage || null
         }));
       }
 
@@ -219,8 +221,8 @@ const authSlice = createSlice({
         // Backend bọc dữ liệu trong ApiResponse: { success, message, data: { userId, ... } }
         const responseData = action.payload.data || action.payload;
 
-        const { userId, phoneNumber, firstName, lastName, avatarUrl, accessToken, refreshToken, sessionId } = responseData;
-        state.user = { userId, phoneNumber, firstName, lastName, avatarUrl };
+        const { userId, phoneNumber, firstName, lastName, avatarUrl, preferredLanguage, accessToken, refreshToken, sessionId } = responseData;
+        state.user = { userId, phoneNumber, firstName, lastName, avatarUrl, preferredLanguage: preferredLanguage || null };
         state.accessToken = accessToken;
         state.refreshToken = refreshToken;
         state.sessionId = sessionId || null;

@@ -1,33 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  SafeAreaView, ActivityIndicator,
+  ActivityIndicator, Alert,
 } from 'react-native';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useDispatch, useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/context/ThemeContext';
 import axiosClient from '../../src/api/axiosClient';
 import { updateUser } from '../../src/store/authSlice';
-
-const LANGUAGES = [
-  { code: "vie_Latn", label: "Tiếng Việt", flag: "🇻🇳", i18nCode: 'vi' },
-  { code: "eng_Latn", label: "English", flag: "🇬🇧", i18nCode: 'en' },
-  { code: "zho_Hans", label: "中文", flag: "🇨🇳", i18nCode: 'zh' },
-  { code: "jpn_Jpan", label: "日本語", flag: "🇯🇵", i18nCode: 'ja' },
-  { code: "kor_Hang", label: "한국어", flag: "🇰🇷", i18nCode: 'ko' },
-  { code: "fra_Latn", label: "Français", flag: "🇫🇷", i18nCode: 'fr' },
-];
-
-const LANGUAGE_MAP = {
-  'vie_Latn': 'vi',
-  'eng_Latn': 'en',
-  'zho_Hans': 'zh',
-  'jpn_Jpan': 'ja',
-  'kor_Hang': 'ko',
-  'fra_Latn': 'fr',
-};
+import {
+  TRANSLATION_LANGUAGES,
+  LANGUAGE_MAP,
+  normalizePreferredLanguage,
+} from '../../src/utils/languageConfig';
 
 const LanguageSettingsScreen = () => {
   const { colors, isDark } = useTheme();
@@ -36,63 +24,86 @@ const LanguageSettingsScreen = () => {
   const dispatch = useDispatch();
   const user = useSelector(state => state.auth.user);
 
-  const [selectedLanguage, setSelectedLanguage] = useState(user?.preferredLanguage || null);
+  const [selectedLanguage, setSelectedLanguage] = useState(
+    normalizePreferredLanguage(user?.preferredLanguage)
+  );
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
 
-  useEffect(() => {
-    fetchLanguageSettings();
-  }, []);
-
-  const fetchLanguageSettings = async () => {
+  const fetchLanguageSettings = useCallback(async () => {
+    setFetching(true);
     try {
-      const res = await axiosClient.get("/settings/language");
-      const langData = res.data?.preferredLanguage || res.preferredLanguage;
-      const normalized = (langData === "" || langData === undefined || langData === "null") ? null : langData;
+      const res = await axiosClient.get('/settings/language');
+      const rawLang = res?.data?.preferredLanguage ?? res?.preferredLanguage;
+      const normalized = normalizePreferredLanguage(rawLang);
 
       setSelectedLanguage(normalized);
-      if (normalized) {
-          dispatch(updateUser({ preferredLanguage: normalized }));
-      }
+      dispatch(updateUser({ preferredLanguage: normalized }));
     } catch (err) {
-      console.error("Failed to fetch language settings", err);
+      if (err?.response?.status !== 401) {
+        console.error('Failed to fetch language settings', err);
+      }
+      setSelectedLanguage(normalizePreferredLanguage(user?.preferredLanguage));
     } finally {
       setFetching(false);
     }
-  };
+  }, [dispatch, user?.preferredLanguage]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchLanguageSettings();
+    }, [fetchLanguageSettings])
+  );
 
   const handleUpdateLanguage = async (code) => {
+    if (loading) return;
+    const previousLanguage = selectedLanguage;
+    setSelectedLanguage(code);
     setLoading(true);
     try {
-      await axiosClient.put("/settings/language", { preferredLanguage: code });
-      setSelectedLanguage(code);
+      await axiosClient.put('/settings/language', { preferredLanguage: code });
       dispatch(updateUser({ preferredLanguage: code }));
 
-      // Update i18n
       const i18nCode = LANGUAGE_MAP[code] || 'en';
       i18n.changeLanguage(i18nCode);
     } catch (error) {
-      console.error("Failed to update language", error);
+      setSelectedLanguage(previousLanguage);
+      console.error('Failed to update language', error);
+      if (error?.response?.status !== 401) {
+        Alert.alert(
+          t('common.error') || 'Lỗi',
+          error?.response?.data?.message || error?.message || 'Không thể cập nhật ngôn ngữ dịch.'
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleDisableTranslation = async () => {
+    if (loading) return;
+    const previousLanguage = selectedLanguage;
+    setSelectedLanguage(null);
     setLoading(true);
     try {
-      await axiosClient.put("/settings/language", { preferredLanguage: null });
-      setSelectedLanguage(null);
+      await axiosClient.put('/settings/language', { preferredLanguage: null });
       dispatch(updateUser({ preferredLanguage: null }));
     } catch (error) {
-      console.error("Failed to disable translation", error);
+      setSelectedLanguage(previousLanguage);
+      console.error('Failed to disable translation', error);
+      if (error?.response?.status !== 401) {
+        Alert.alert(
+          t('common.error') || 'Lỗi',
+          error?.response?.data?.message || error?.message || 'Không thể tắt tự động dịch.'
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right', 'bottom']}>
       <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity
           style={[styles.backBtn, { backgroundColor: isDark ? colors.surface300 : '#f1f5f9' }]}
@@ -103,12 +114,12 @@ const LanguageSettingsScreen = () => {
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>
           {t('settings.language_title')}
         </Text>
-        <View style={{ width: 42 }}>
-          {loading && <ActivityIndicator size="small" color={colors.primary} />}
+        <View style={{ width: 42, alignItems: 'center', justifyContent: 'center' }}>
+          {(loading || fetching) && <ActivityIndicator size="small" color={colors.primary} />}
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
         <View style={styles.section}>
           <Text style={[styles.hintText, { color: colors.textSubtle }]}>
             {t('settings.auto_translate_msg')}
@@ -120,6 +131,7 @@ const LanguageSettingsScreen = () => {
               style={styles.menuItem}
               onPress={handleDisableTranslation}
               disabled={loading}
+              activeOpacity={0.7}
             >
               <View style={styles.menuItemLeft}>
                 <View style={[styles.iconContainer, { backgroundColor: isDark ? colors.surface300 : '#f1f5f9' }]}>
@@ -137,12 +149,13 @@ const LanguageSettingsScreen = () => {
             <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
 
             {/* Language list */}
-            {LANGUAGES.map((lang, index) => (
+            {TRANSLATION_LANGUAGES.map((lang, index) => (
               <React.Fragment key={lang.code}>
                 <TouchableOpacity
                   style={styles.menuItem}
                   onPress={() => handleUpdateLanguage(lang.code)}
                   disabled={loading}
+                  activeOpacity={0.7}
                 >
                   <View style={styles.menuItemLeft}>
                     <View style={[styles.iconContainer, { backgroundColor: isDark ? colors.surface300 : '#f1f5f9' }]}>
@@ -156,7 +169,7 @@ const LanguageSettingsScreen = () => {
                     <Ionicons name="checkmark-circle" size={24} color="#10b981" />
                   )}
                 </TouchableOpacity>
-                {index < LANGUAGES.length - 1 && (
+                {index < TRANSLATION_LANGUAGES.length - 1 && (
                   <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
                 )}
               </React.Fragment>
