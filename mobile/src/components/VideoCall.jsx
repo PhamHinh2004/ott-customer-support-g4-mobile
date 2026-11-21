@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Dimensions, Image, Platform, Animated, Easing, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Image, Platform, Animated, Easing, TouchableWithoutFeedback } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { useDispatch, useSelector, shallowEqual } from 'react-redux';
 import { useTranslation } from 'react-i18next';
@@ -13,8 +13,7 @@ import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { getAgoraHTML } from '../utils/agora-web-template';
 import CONFIG from '../config';
-
-const { width, height } = Dimensions.get('window');
+import { useResponsive } from '../hooks/useResponsive';
 
 // ─── Countdown Ring Component ──────────────────────────────────────────
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -99,6 +98,9 @@ const VideoCall = ({
   micOn, camOn, remoteUsers, agoraConfig, endCallReason, isGroup
 }) => {
   const { t } = useTranslation();
+  const { width, callGridColumns } = useResponsive();
+  const waitingCardWidth = Math.min(width * 0.88, 440);
+  const gridTileSize = Math.min((width - 40 - callGridColumns * 16) / callGridColumns, 220);
   const dispatch = useDispatch();
   const webViewRef = useRef(null);
   const showControls = true;
@@ -527,7 +529,7 @@ else if (data.type === 'sync' || data.type === 'sync-count') {
                         const list = [...remoteUsers];
                         const tiles = [list[0], { isLocal: true }, ...list.slice(1)];
                         return tiles.map((item, i) => (
-                          <View key={i} style={styles.gridTile}>
+                          <View key={i} style={[styles.gridTile, { width: gridTileSize }]}>
                             <View style={styles.tileAvatarContainer}>
                               {item.isLocal ? (
                                 user?.avatar ? <Image source={{ uri: formatAvatarUrl(user.avatar) }} style={styles.tileAvatar} /> :
@@ -544,7 +546,7 @@ else if (data.type === 'sync' || data.type === 'sync-count') {
                   ) : (
                     /* SOLO VIEW / 1-1 / WAITING */
                     <View style={styles.singleParticipantInfo}>
-                      <View style={styles.waitingCard}>
+                      <View style={[styles.waitingCard, { width: waitingCardWidth }]}>
                         <View style={styles.avatarContainer}>
                           {formatAvatarUrl(isGroup ? (activeConversation?.avatar || callerInfo?.avatar) : callerInfo?.avatar) ? (
                             <Image
@@ -708,11 +710,10 @@ const styles = StyleSheet.create({
   centerInfo: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   waitingCard: {
     alignItems: 'center',
-    width: width * 0.88,
   },
   singleParticipantInfo: { alignItems: 'center' },
   groupGrid: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
-  gridTile: { width: (width - 60) / 2, aspectRatio: 1, margin: 8, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  gridTile: { aspectRatio: 1, margin: 8, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   tileAvatarContainer: { position: 'relative', marginBottom: 8 },
   tileAvatar: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)' },
   tileInitials: { color: 'white', fontSize: 32, fontWeight: 'bold' },

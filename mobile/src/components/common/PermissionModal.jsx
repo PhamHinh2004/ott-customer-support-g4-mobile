@@ -5,13 +5,12 @@ import {
   Modal,
   StyleSheet,
   TouchableOpacity,
-  Dimensions,
 } from 'react-native';
 import { MaterialIcons, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-
-const { width } = Dimensions.get('window');
+import { useResponsive } from '../../hooks/useResponsive';
 
 const PermissionModal = ({ visible, onClose, onConfirm, type }) => {
+  const { modalMaxWidth } = useResponsive();
   const config = {
     camera: {
       title: 'Quyền truy cập Máy ảnh',
@@ -45,7 +44,7 @@ const PermissionModal = ({ visible, onClose, onConfirm, type }) => {
 
   return (
     <View style={styles.overlay}>
-      <View style={styles.container}>
+      <View style={[styles.container, { maxWidth: modalMaxWidth }]}>
         <View style={[styles.iconContainer, { backgroundColor: `${current.color}15` }]}>
           {current.icon}
         </View>

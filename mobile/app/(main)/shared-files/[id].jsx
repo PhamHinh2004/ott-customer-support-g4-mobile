@@ -14,11 +14,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRealId } from '../../../src/store/chatSlice';
 import FileViewerModal from '../../../src/components/FileViewerModal';
 import CONFIG from '../../../src/config';
+import { useResponsive } from '../../../src/hooks/useResponsive';
 
 const SharedFilesScreen = () => {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { isWide, contentMaxWidth } = useResponsive();
   const BASE_URL = CONFIG.BASE_URL;
 
   const [selectedFile, setSelectedFile] = useState(null);
@@ -127,7 +129,10 @@ const SharedFilesScreen = () => {
           data={sharedFiles}
           renderItem={renderFileItem}
           keyExtractor={(item, index) => item?.id ? `${item.id}_${index}` : `file_${index}`}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            isWide && { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' },
+          ]}
           showsVerticalScrollIndicator={false}
         />
       )}

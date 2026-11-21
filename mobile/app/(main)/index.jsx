@@ -17,6 +17,10 @@ import { useTheme } from '../../src/context/ThemeContext';
 import { getPreviewText } from '../../src/utils/messageUtils';
 import { useTranslation } from 'react-i18next';
 import { getStorageItem, setStorageItem } from '../../src/utils/storage';
+import { useResponsive } from '../../src/hooks/useResponsive';
+import { XStack, YStack, Card, Text as TText } from 'tamagui';
+import AppButton from '../../src/components/common/Button';
+import AppAvatar from '../../src/components/common/Avatar';
 
 
 const HomeScreen = () => {
@@ -26,6 +30,8 @@ const HomeScreen = () => {
   const { conversations, loading } = useSelector((state) => state.chat);
   const currentUser = useSelector((state) => state.auth.user);
   const { colors, isDark, toggleTheme } = useTheme();
+  const { isWide, isTablet, isLandscape, isCompactHeight } = useResponsive();
+  const [selectedDetailConvId, setSelectedDetailConvId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -383,21 +389,41 @@ const HomeScreen = () => {
         friction={2}
         rightThreshold={40}
       >
-        <TouchableOpacity
-          style={[
-            styles.conversationItem, 
-            { backgroundColor: colors.background, borderBottomColor: colors.border },
-            isUnread && { backgroundColor: isDark ? colors.surface200 : '#eef2ff' },
-            item.isPinned && { backgroundColor: isDark ? colors.surface100 : colors.background }
-          ]}
-          onPress={() => router.push({
-            pathname: `/chat/${encodeURIComponent(item.conversationId)}`,
-            params: {
-              name: displayName,
-              avatar: avatarUrl,
-              type: item.type
-            }
-          })}
+            <TouchableOpacity
+              style={[
+                styles.conversationItem,
+                { backgroundColor: colors.background, borderBottomColor: colors.border },
+                isUnread && { backgroundColor: isDark ? colors.surface200 : '#eef2ff' },
+                item.isPinned && { backgroundColor: isDark ? colors.surface100 : colors.background },
+                isWide && selectedDetailConvId === item.conversationId && {
+                  backgroundColor: isDark ? 'rgba(99, 102, 241, 0.16)' : '#e0e7ff',
+                },
+              ]}
+              onPress={() => {
+                if (isWide) {
+                  if (selectedDetailConvId === item.conversationId) {
+                    router.push({
+                      pathname: `/chat/${encodeURIComponent(item.conversationId)}`,
+                      params: {
+                        name: displayName,
+                        avatar: avatarUrl,
+                        type: item.type
+                      }
+                    });
+                  } else {
+                    setSelectedDetailConvId(item.conversationId);
+                  }
+                  return;
+                }
+                router.push({
+                  pathname: `/chat/${encodeURIComponent(item.conversationId)}`,
+                  params: {
+                    name: displayName,
+                    avatar: avatarUrl,
+                    type: item.type
+                  }
+                });
+              }}
           onLongPress={() => {
             setSelectedConv(item);
             setActionModalType('menu');
@@ -459,125 +485,264 @@ const HomeScreen = () => {
     );
   };
 
+  const selectedDetailConv = useMemo(() => {
+    if (!isWide) return null;
+    return conversations.find(c => c.conversationId === selectedDetailConvId)
+      || conversations[0]
+      || null;
+  }, [isWide, conversations, selectedDetailConvId]);
+
+  const selectedDetailMeta = useMemo(() => {
+    if (!selectedDetailConv) return null;
+    const myId = String(currentUser?.userId || currentUser?.id || '');
+    const members = selectedDetailConv.members || selectedDetailConv.participants || [];
+    const other = selectedDetailConv.type === 'SINGLE'
+      ? members.find(m => {
+          const mId = String(m.userId || m.id || '');
+          return mId !== '' && mId !== myId;
+        })
+      : null;
+    const name = selectedDetailConv.type === 'SINGLE'
+      ? (other?.fullName || other?.name || other?.firstName || selectedDetailConv.name || t('common.user'))
+      : (selectedDetailConv.name || t('chat.default_group_name'));
+    const avatar = getAvatarUrl(
+      selectedDetailConv.type === 'SINGLE'
+        ? (other?.avatarUrl || other?.avatar || other?.profilePic)
+        : (selectedDetailConv.avatarUrl || selectedDetailConv.avatar),
+      name
+    );
+    const isOnline = selectedDetailConv.type === 'SINGLE' && (other?.status === 'ONLINE' || other?.isOnline === true);
+    const lastSenderId = String(selectedDetailConv.lastMessageSenderId || selectedDetailConv.lastSenderId || '');
+    const preview = getPreviewText(selectedDetailConv.lastMessage, lastSenderId);
+    return { name, avatar, isOnline, preview, membersCount: members.length };
+  }, [selectedDetailConv, currentUser, t]);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {/* Header chính */}
-        <View style={styles.header}>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>{t('chat.title')}</Text>
-          <View style={styles.headerButtons}>
-            <TouchableOpacity 
-              style={[styles.headerButton, { backgroundColor: colors.surface200 }]} 
-              onPress={() => router.push('/qr-scanner')}
-              title="Quét mã QR đăng nhập web"
-            >
-              <MaterialCommunityIcons name="qrcode-scan" size={22} color={colors.foreground} />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.headerButton, { backgroundColor: colors.surface200 }]} 
-              onPress={toggleTheme}
-            >
-              <Ionicons 
-                name={isDark ? "sunny" : "moon"} 
-                size={22} 
-                color={colors.foreground} 
-              />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.headerButton, { backgroundColor: colors.surface200 }]} 
-              onPress={() => setCreateGroupVisible(true)}
-            >
-              <MaterialIcons name="group-add" size={24} color={colors.foreground} />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.headerButton, { backgroundColor: colors.surface200 }]} 
-              onPress={() => setSearchVisible(true)}
-              title="Tìm bạn mới"
-            >
-              <MaterialIcons name="person-add" size={24} color={colors.foreground} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Search Bar (Conversation Filter) */}
-        <View style={styles.searchContainer}>
-          <View style={[styles.searchBar, { backgroundColor: isDark ? colors.surface200 : '#f3f4f6' }]}>
-            <MaterialIcons name="search" size={20} color={colors.textMuted} />
-            <TextInput
-              placeholder={t('chat.search_placeholder', { type: t('chat.group').toLowerCase() })}
-              placeholderTextColor={colors.textMuted}
-              style={[styles.searchInput, { color: colors.foreground }]}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              returnKeyType="search"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-
-        {/* Tabs Phân loại (Đồng bộ Web) */}
-        <View style={[styles.filterTabs, { borderBottomColor: colors.border }]}>
-          <View style={styles.tabsRow}>
-            <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('priority')}>
-              <Text style={[styles.tabText, activeTab === 'priority' && styles.tabTextActive]}>{t('chat.priority')}</Text>
-              {activeTab === 'priority' && <View style={styles.tabIndicator} />}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('hidden')}>
-              <Text style={[styles.tabText, activeTab === 'hidden' && styles.tabTextActive]}>{t('chat.hidden_tab')}</Text>
-              {activeTab === 'hidden' && <View style={styles.tabIndicator} />}
-            </TouchableOpacity>
-          </View>
-
-          {activeTab === 'priority' && (
-            <TouchableOpacity 
-              style={[styles.filterButton, (filterType !== 'all' || selectedTags.length > 0) ? styles.filterButtonActive : { backgroundColor: colors.surface200 }]} 
-              onPress={() => setFilterVisible(true)}
-            >
-              <Text style={[styles.filterButtonText, (filterType !== 'all' || selectedTags.length > 0) ? styles.filterButtonTextActive : { color: colors.textMuted }]}>
-                {filterType === 'unread' ? t('chat.unread') : selectedTags.length > 0 ? `${t('chat.classify')} (${selectedTags.length})` : t('chat.classify')}
-              </Text>
-              <Ionicons 
-                name="chevron-down" 
-                size={14} 
-                color={(filterType !== 'all' || selectedTags.length > 0) ? "#fff" : colors.textMuted} 
-              />
-            </TouchableOpacity>
-          )}
-        </View>
-
-
-        {/*
-           Chỉ hiển thị màn hình loading trung tâm khi:
-           1. Đang tải (loading) HOẶC đang trong thời gian chờ 2s (showInitialLoading)
-           2. VÀ Quan trọng: Danh sách hội thoại hiện tại phải đang trống (conversations.length === 0)
-           3. VÀ Không phải đang thực hiện thao tác kéo để làm mới (refreshing)
-        */}
-        {((loading || showInitialLoading) && conversations.length === 0 && !refreshing) ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#6366f1" />
-            <Text style={[styles.loadingText, { color: colors.textMuted, marginTop: 15 }]}>
-              {t('chat.loading_content')}
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={displayConversations}
-            renderItem={renderConversationItem}
-            keyExtractor={(item, index) => item.conversationId || `header-${index}`}
-            contentContainerStyle={styles.listContent}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>{t('chat.no_conversations_desc')}</Text>
+        <XStack flex={1}>
+          {/* Cột danh sách hội thoại (Master) */}
+          <YStack
+            flex={isWide ? 0 : 1}
+            width={isWide ? (isTablet ? 390 : 340) : '100%'}
+            borderRightWidth={isWide ? 1 : 0}
+            borderRightColor={colors.border}
+          >
+            {/* Header chính */}
+            <View style={[styles.header, isCompactHeight && { paddingTop: 14 }]}>
+              <Text style={[styles.headerTitle, { color: colors.foreground }]}>{t('chat.title')}</Text>
+              <View style={styles.headerButtons}>
+                <TouchableOpacity 
+                  style={[styles.headerButton, { backgroundColor: colors.surface200 }]} 
+                  onPress={() => router.push('/qr-scanner')}
+                  title="Quét mã QR đăng nhập web"
+                >
+                  <MaterialCommunityIcons name="qrcode-scan" size={22} color={colors.foreground} />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.headerButton, { backgroundColor: colors.surface200 }]} 
+                  onPress={toggleTheme}
+                >
+                  <Ionicons 
+                    name={isDark ? "sunny" : "moon"} 
+                    size={22} 
+                    color={colors.foreground} 
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.headerButton, { backgroundColor: colors.surface200 }]} 
+                  onPress={() => setCreateGroupVisible(true)}
+                >
+                  <MaterialIcons name="group-add" size={24} color={colors.foreground} />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.headerButton, { backgroundColor: colors.surface200 }]} 
+                  onPress={() => setSearchVisible(true)}
+                  title="Tìm bạn mới"
+                >
+                  <MaterialIcons name="person-add" size={24} color={colors.foreground} />
+                </TouchableOpacity>
               </View>
-            }
-          />
-        )}
+            </View>
+
+            {/* Search Bar (Conversation Filter) */}
+            <View style={styles.searchContainer}>
+              <View style={[styles.searchBar, { backgroundColor: isDark ? colors.surface200 : '#f3f4f6' }]}>
+                <MaterialIcons name="search" size={20} color={colors.textMuted} />
+                <TextInput
+                  placeholder={t('chat.search_placeholder', { type: t('chat.group').toLowerCase() })}
+                  placeholderTextColor={colors.textMuted}
+                  style={[styles.searchInput, { color: colors.foreground }]}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  returnKeyType="search"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            {/* Tabs Phân loại (Đồng bộ Web) */}
+            <View style={[styles.filterTabs, { borderBottomColor: colors.border }]}>
+              <View style={styles.tabsRow}>
+                <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('priority')}>
+                  <Text style={[styles.tabText, activeTab === 'priority' && styles.tabTextActive]}>{t('chat.priority')}</Text>
+                  {activeTab === 'priority' && <View style={styles.tabIndicator} />}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('hidden')}>
+                  <Text style={[styles.tabText, activeTab === 'hidden' && styles.tabTextActive]}>{t('chat.hidden_tab')}</Text>
+                  {activeTab === 'hidden' && <View style={styles.tabIndicator} />}
+                </TouchableOpacity>
+              </View>
+
+              {activeTab === 'priority' && (
+                <TouchableOpacity 
+                  style={[styles.filterButton, (filterType !== 'all' || selectedTags.length > 0) ? styles.filterButtonActive : { backgroundColor: colors.surface200 }]} 
+                  onPress={() => setFilterVisible(true)}
+                >
+                  <Text style={[styles.filterButtonText, (filterType !== 'all' || selectedTags.length > 0) ? styles.filterButtonTextActive : { color: colors.textMuted }]}>
+                    {filterType === 'unread' ? t('chat.unread') : selectedTags.length > 0 ? `${t('chat.classify')} (${selectedTags.length})` : t('chat.classify')}
+                  </Text>
+                  <Ionicons 
+                    name="chevron-down" 
+                    size={14} 
+                    color={(filterType !== 'all' || selectedTags.length > 0) ? "#fff" : colors.textMuted} 
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {((loading || showInitialLoading) && conversations.length === 0 && !refreshing) ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#6366f1" />
+                <Text style={[styles.loadingText, { color: colors.textMuted, marginTop: 15 }]}>
+                  {t('chat.loading_content')}
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={displayConversations}
+                renderItem={renderConversationItem}
+                keyExtractor={(item, index) => item.conversationId || `header-${index}`}
+                contentContainerStyle={styles.listContent}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                ListEmptyComponent={
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>{t('chat.no_conversations_desc')}</Text>
+                  </View>
+                }
+              />
+            )}
+          </YStack>
+
+          {/* Cột chi tiết nhanh trên Tablet / Landscape (Detail) */}
+          {isWide && (
+            <YStack
+              flex={1}
+              alignItems="center"
+              justifyContent="center"
+              padding="6"
+              paddingBottom={110}
+              backgroundColor={isDark ? colors.surface100 : '#f8fafc'}
+            >
+              {selectedDetailConv && selectedDetailMeta ? (
+                <Card
+                  width="100%"
+                  maxWidth={480}
+                  backgroundColor={colors.card}
+                  borderRadius={28}
+                  padding="6"
+                  borderWidth={1}
+                  borderColor={colors.border}
+                  alignItems="center"
+                  gap="4"
+                >
+                  <AppAvatar
+                    uri={selectedDetailMeta.avatar}
+                    name={selectedDetailMeta.name}
+                    size={88}
+                    isOnline={selectedDetailMeta.isOnline}
+                    borderColor={colors.card}
+                  />
+
+                  <YStack alignItems="center" gap="1-5">
+                    <TText fontSize={22} fontWeight="800" color={colors.foreground} textAlign="center">
+                      {selectedDetailMeta.name}
+                    </TText>
+                    <TText fontSize={13} color={colors.textMuted}>
+                      {selectedDetailConv.type === 'GROUP'
+                        ? t('info.member_count', { count: selectedDetailMeta.membersCount })
+                        : selectedDetailMeta.isOnline
+                          ? t('chat.online')
+                          : t('chat.offline')}
+                    </TText>
+                  </YStack>
+
+                  {selectedDetailMeta.preview ? (
+                    <Card
+                      width="100%"
+                      backgroundColor={isDark ? colors.surface200 : '#f1f5f9'}
+                      padding="3-5"
+                      borderRadius={16}
+                    >
+                      <TText fontSize={12} fontWeight="700" color={colors.textSubtle} marginBottom="1">
+                        TIN NHẮN GẦN NHẤT
+                      </TText>
+                      <TText fontSize={14} color={colors.foreground} numberOfLines={2}>
+                        {selectedDetailMeta.preview}
+                      </TText>
+                    </Card>
+                  ) : null}
+
+                  <XStack width="100%" gap="3" marginTop="2">
+                    <AppButton
+                      flex={1}
+                      title="Mở đoạn chat"
+                      icon={<Ionicons name="chatbubble-ellipses" size={18} color="#fff" />}
+                      onPress={() =>
+                        router.push({
+                          pathname: `/chat/${encodeURIComponent(selectedDetailConv.conversationId)}`,
+                          params: {
+                            name: selectedDetailMeta.name,
+                            avatar: selectedDetailMeta.avatar,
+                            type: selectedDetailConv.type,
+                          },
+                        })
+                      }
+                    />
+                    <AppButton
+                      variant="secondary"
+                      title="Thông tin"
+                      onPress={() =>
+                        router.push({
+                          pathname: `/chat-info/${encodeURIComponent(selectedDetailConv.conversationId)}`,
+                          params: {
+                            name: selectedDetailMeta.name,
+                            avatar: selectedDetailMeta.avatar,
+                            type: selectedDetailConv.type,
+                          },
+                        })
+                      }
+                    />
+                  </XStack>
+                </Card>
+              ) : (
+                <YStack alignItems="center" gap="3" maxWidth={360}>
+                  <Ionicons name="chatbubbles-outline" size={64} color={colors.primary} />
+                  <TText fontSize={20} fontWeight="800" color={colors.foreground} textAlign="center">
+                    F5 Chat Workspace
+                  </TText>
+                  <TText fontSize={14} color={colors.textMuted} textAlign="center">
+                    {t('chat.no_conversations_desc')}
+                  </TText>
+                </YStack>
+              )}
+            </YStack>
+          )}
+        </XStack>
 
         {/* Modal Bộ lọc (Filter) */}
         <Modal visible={filterVisible} transparent animationType="fade">

@@ -11,13 +11,10 @@ import {
   Image,
   Alert,
   Modal,
-  Dimensions,
   LayoutAnimation,
   Keyboard,
   ScrollView,
 } from 'react-native';
-
-
 
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
@@ -36,10 +33,7 @@ import {
 import PermissionModal from './common/PermissionModal';
 import { useTheme } from '../context/ThemeContext';
 import { useTranslation } from 'react-i18next';
-
-
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import { useResponsive } from '../hooks/useResponsive';
 
 const emojiCategories = [
   { id: 'smileys', label: '😀', emojis: ['😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '🥴', '😵', '🤯', '🤠', '🥳', '😎', '🤓', '🧐', '😕', '😟', '🙁', '☹️', '😮', '😯', '😲', '😳', '🥺', '😦', '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣', '😞', '😓', '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡', '👹', '👺', '👻', '👽', '👾', '🤖'] },
@@ -64,6 +58,11 @@ const stickerSets = [
 const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingChange, conversationType, onOpenPoll, members = [] }, ref) => {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const { width: screenWidth, emojiColumns, stickerColumns, gifColumns } = useResponsive();
+  const emojiCellWidth = (screenWidth - 16) / emojiColumns;
+  const stickerCellSize = (screenWidth - 24 - (stickerColumns - 1) * 10) / stickerColumns;
+  const gifCellWidth = (screenWidth - 24 - (gifColumns - 1) * 10) / gifColumns;
+  const mentionListWidth = Math.min(screenWidth - 24, 520);
   const [message, setMessage] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
@@ -300,7 +299,7 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
                   <TouchableOpacity
                     key={`${emoji}-${i}`}
                     onPress={() => handleEmojiPress(emoji)}
-                    style={styles.emojiCell}
+                    style={[styles.emojiCell, { width: emojiCellWidth }]}
                   >
                     <Text style={styles.emojiText}>{emoji}</Text>
                   </TouchableOpacity>
@@ -325,7 +324,7 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
                   <TouchableOpacity
                     key={sticker.id}
                     onPress={() => handleSendSticker(sticker.url)}
-                    style={styles.stickerCell}
+                    style={[styles.stickerCell, { width: stickerCellSize, height: stickerCellSize }]}
                   >
                     <Image source={{ uri: sticker.previewUrl }} style={styles.stickerImage} />
                   </TouchableOpacity>
@@ -351,7 +350,7 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
                   <TouchableOpacity
                     key={gif.id}
                     onPress={() => handleSendGif(gif.url)}
-                    style={styles.gifCell}
+                    style={[styles.gifCell, { width: gifCellWidth }]}
                   >
                     <Image source={{ uri: gif.previewUrl }} style={styles.gifImage} />
                   </TouchableOpacity>
@@ -1064,7 +1063,7 @@ const MessageInput = forwardRef(({ onSendMessage, isLoading = false, onTypingCha
 
             <View style={{ flex: 1, position: 'relative' }}>
               {showMentions && (
-                <View style={[styles.mentionList, { backgroundColor: colors.surface100, borderColor: colors.border, left: isExpanded ? -10 : -110 }]}>
+                <View style={[styles.mentionList, { width: mentionListWidth, backgroundColor: colors.surface100, borderColor: colors.border, left: isExpanded ? -10 : -110 }]}>
 
                   <View style={[styles.mentionHeader, { borderBottomColor: colors.border }]}>
                     <Text style={[styles.mentionHeaderText, { color: colors.textMuted }]}>{t('chat.mention_members_header')}</Text>
@@ -1449,7 +1448,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: '100%',
     left: -40,
-    width: SCREEN_WIDTH - 24,
     maxHeight: 300,
     borderWidth: 1,
     borderRadius: 16,
@@ -1570,7 +1568,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   emojiCell: {
-    width: SCREEN_WIDTH / 8 - 2,
     height: 42,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1587,8 +1584,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   stickerCell: {
-    width: (SCREEN_WIDTH - 24 - 30) / 4,
-    height: (SCREEN_WIDTH - 24 - 30) / 4,
     borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.05)',
@@ -1609,7 +1604,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   gifCell: {
-    width: (SCREEN_WIDTH - 24 - 10) / 2,
     height: 100,
     borderRadius: 12,
     overflow: 'hidden',

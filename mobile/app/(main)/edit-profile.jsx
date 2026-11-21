@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   Image,
   ScrollView,
   ActivityIndicator,
@@ -13,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useDispatch, useSelector } from 'react-redux';
@@ -23,6 +23,7 @@ import { restoreState } from '../../src/store/authSlice';
 import { getStorageItem, setStorageItem } from '../../src/utils/storage';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import ResponsiveContainer from '../../src/components/common/ResponsiveContainer';
 
 
 const EditProfileScreen = () => {
@@ -171,6 +172,7 @@ const EditProfileScreen = () => {
 
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <ResponsiveContainer variant="form" maxWidth={560}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatarWrapper}>
               <Image
@@ -231,6 +233,7 @@ const EditProfileScreen = () => {
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>{t('profile.save_btn').toUpperCase()}</Text>}
           </TouchableOpacity>
 
+          </ResponsiveContainer>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
@@ -24,10 +23,10 @@ import { mediaApi } from '../api/mediaApi';
 import { fetchConversations } from '../store/chatSlice';
 import { useRouter } from 'expo-router';
 import CONFIG from '../config';
-
-const { width, height } = Dimensions.get('window');
+import { useResponsive } from '../hooks/useResponsive';
 
 const CreateGroupModal = ({ visible, onClose }) => {
+  const { contentMaxWidth, isWide } = useResponsive();
   const router = useRouter();
   const dispatch = useDispatch();
   const currentUser = useSelector(state => state.auth.user);
@@ -221,7 +220,7 @@ const CreateGroupModal = ({ visible, onClose }) => {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.content}>
+          <View style={[styles.content, isWide && { maxWidth: Math.min(contentMaxWidth, 640), width: '100%', alignSelf: 'center' }]}>
             {/* Group Name Input */}
             <View style={styles.groupNameContainer}>
               <TouchableOpacity style={styles.avatarPlaceholder} onPress={pickAvatar}>

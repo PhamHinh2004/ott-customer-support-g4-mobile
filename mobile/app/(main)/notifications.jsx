@@ -6,11 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
-  SafeAreaView,
   ActivityIndicator,
   RefreshControl,
   DeviceEventEmitter,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchNotifications, markAsRead, removeNotification } from '../../src/store/notificationSlice';
@@ -24,6 +24,7 @@ import { notificationApi } from '../../src/api/userApi';
 import CONFIG from '../../src/config';
 import { useTranslation } from 'react-i18next';
 import { translateNotificationMessage, translateNotificationTitle } from '../../src/utils/notificationMessageTranslator';
+import { useResponsive } from '../../src/hooks/useResponsive';
 
 
 const formatDate = (date) => {
@@ -46,6 +47,7 @@ const formatFullDate = (date) => {
 const NotificationsScreen = () => {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const { isWide, contentMaxWidth } = useResponsive();
   const dispatch = useDispatch();
 
   const currentUser = useSelector((state) => state.auth.user);
@@ -437,7 +439,10 @@ const NotificationsScreen = () => {
           data={notifications}
           renderItem={renderNotificationItem}
           keyExtractor={(item) => (item.id || item.notificationId || Math.random().toString())}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            isWide && { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' },
+          ]}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#667eea" />
           }

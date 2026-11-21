@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/context/ThemeContext';
 import axiosClient from '../../src/api/axiosClient';
 import { updateUser } from '../../src/store/authSlice';
+import ResponsiveContainer from '../../src/components/common/ResponsiveContainer';
 import {
   TRANSLATION_LANGUAGES,
   LANGUAGE_MAP,
@@ -120,6 +121,7 @@ const LanguageSettingsScreen = () => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        <ResponsiveContainer>
         <View style={styles.section}>
           <Text style={[styles.hintText, { color: colors.textSubtle }]}>
             {t('settings.auto_translate_msg')}
@@ -176,6 +178,7 @@ const LanguageSettingsScreen = () => {
             ))}
           </View>
         </View>
+        </ResponsiveContainer>
       </ScrollView>
     </SafeAreaView>
   );

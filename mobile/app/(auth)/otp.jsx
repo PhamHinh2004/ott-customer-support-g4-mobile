@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useResponsive } from '../../src/hooks/useResponsive';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getPhoneNumberFromParams } from '../../src/utils/otpParams';
 
@@ -25,6 +26,7 @@ import { getPhoneNumberFromParams } from '../../src/utils/otpParams';
 
 const OTPScreen = () => {
   const router = useRouter();
+  const { formMaxWidth, isCompactHeight } = useResponsive();
   const params = useLocalSearchParams();
   const phoneNumber = getPhoneNumberFromParams(params.phoneNumber);
   const { verify, resend, loading, error: authError, accessToken, clearError } = useAuth();
@@ -129,10 +131,11 @@ const OTPScreen = () => {
         style={{ flex: 1 }}
       >
         <ScrollView 
-          contentContainerStyle={styles.scrollContent} 
+          contentContainerStyle={[styles.scrollContent, isCompactHeight && { paddingVertical: 16 }]} 
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          <View style={{ width: '100%', maxWidth: formMaxWidth, alignSelf: 'center' }}>
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.appName}>Xác Thực Số Điện Thoại</Text>
@@ -206,6 +209,7 @@ const OTPScreen = () => {
                 </Text>
               </TouchableOpacity>
             </View>
+          </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -6,11 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
   Alert,
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { useRouter } from 'expo-router';
@@ -21,6 +21,9 @@ import { getStorageItem, setStorageItem } from '../../src/utils/storage';
 import DeleteAccountModal from '../../src/components/DeleteAccountModal';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { Card, YStack, XStack, Separator, Text as TText } from 'tamagui';
+import AppAvatar from '../../src/components/common/Avatar';
+import ResponsiveContainer from '../../src/components/common/ResponsiveContainer';
 
 
 const ProfileScreen = () => {
@@ -114,115 +117,134 @@ const ProfileScreen = () => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
-
-        {/* Profile Card */}
-        <View style={[styles.headerCard, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-          <TouchableOpacity
-            style={[styles.editIconBtn, { backgroundColor: isDark ? colors.surface300 : '#f1f5f9' }]}
-            onPress={() => router.push('/(main)/edit-profile')}
+        <ResponsiveContainer>
+          {/* Profile Card */}
+          <Card
+            backgroundColor={colors.card}
+            borderBottomColor={colors.border}
+            borderBottomWidth={1}
+            alignItems="center"
+            paddingVertical={30}
+            borderBottomLeftRadius={30}
+            borderBottomRightRadius={30}
+            position="relative"
+            padded={false}
           >
-            <MaterialIcons name="edit" size={22} color={colors.textMuted} />
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.editIconBtn, { backgroundColor: isDark ? colors.surface300 : '#f1f5f9' }]}
+              onPress={() => router.push('/(main)/edit-profile')}
+            >
+              <MaterialIcons name="edit" size={22} color={colors.textMuted} />
+            </TouchableOpacity>
 
-          <View style={styles.avatarContainer}>
-            <Image source={{ uri: displayUser.avatar }} style={[styles.avatar, { borderColor: colors.border, backgroundColor: colors.surface200 }]} />
-          </View>
-
-          <Text style={[styles.userName, { color: colors.foreground }]}>{displayUser.fullName}</Text>
-          <Text style={[styles.userPhone, { color: colors.textMuted }]}>{displayUser.phoneNumber}</Text>
-
-          <View style={[styles.statusBadge, { backgroundColor: isDark ? colors.surface300 : '#f1f5f9' }]}>
-            <View style={[styles.statusDot, { backgroundColor: displayUser.status === 'online' ? '#10b981' : colors.textSubtle }]} />
-            <Text style={[styles.statusText, { color: colors.textMuted }]}>{displayUser.status === 'online' ? t('sidebar.online') : t('sidebar.offline')}</Text>
-          </View>
-        </View>
-
-
-        {/* Details Section - Khôi phục đầy đủ */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSubtle }]}>{t('info.privacy')}</Text>
-          <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
-            <View style={styles.infoItem}>
-              <Text style={[styles.infoLabel, { color: colors.textSubtle }]}>{t('profile.bio')}</Text>
-              <Text style={[styles.infoValue, { color: colors.foreground }]}>{displayUser.bio}</Text>
+            <View style={styles.avatarContainer}>
+              <AppAvatar
+                uri={displayUser.avatar}
+                name={displayUser.fullName}
+                size={100}
+                isOnline={displayUser.status === 'online'}
+                borderColor={colors.card}
+              />
             </View>
-            <View style={[styles.infoDivider, { backgroundColor: colors.border }]} />
-            <View style={styles.infoItem}>
-              <Text style={[styles.infoLabel, { color: colors.textSubtle }]}>{t('profile.email')}</Text>
-              <Text style={[styles.infoValue, { color: colors.foreground }]}>{displayUser.email}</Text>
-            </View>
-            <View style={[styles.infoDivider, { backgroundColor: colors.border }]} />
-            <View style={styles.infoItem}>
-              <Text style={[styles.infoLabel, { color: colors.textSubtle }]}>{t('profile.user_id')}</Text>
-              <Text style={[styles.infoValue, { color: colors.foreground }]} numberOfLines={1}>{displayUser.userId}</Text>
-            </View>
-          </View>
-        </View>
 
+            <TText fontSize={20} fontWeight="700" color={colors.foreground}>{displayUser.fullName}</TText>
+            <TText fontSize={13} color={colors.textMuted} marginTop={4} marginBottom={12}>{displayUser.phoneNumber}</TText>
 
-        {/* Personal Storage */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSubtle }]}>{t('info.shared_media')}</Text>
-          <View style={[styles.menuCard, { backgroundColor: colors.card }]}>
-            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(main)/my-cloud')}>
-              <View style={styles.menuItemLeft}>
-                <Ionicons name="cloud-done-outline" size={20} color={colors.primary} />
-                <Text style={[styles.menuItemText, { color: colors.foreground }]}>{t('cloud.title')}</Text>
+            <XStack
+              alignItems="center"
+              backgroundColor={isDark ? colors.surface300 : '#f1f5f9'}
+              paddingHorizontal={12}
+              paddingVertical={5}
+              borderRadius={20}
+            >
+              <View style={[styles.statusDot, { backgroundColor: displayUser.status === 'online' ? '#10b981' : colors.textSubtle }]} />
+              <Text style={[styles.statusText, { color: colors.textMuted }]}>{displayUser.status === 'online' ? t('sidebar.online') : t('sidebar.offline')}</Text>
+            </XStack>
+          </Card>
+
+          {/* Details Section */}
+          <YStack paddingHorizontal={20} marginTop={25}>
+            <Text style={[styles.sectionTitle, { color: colors.textSubtle }]}>{t('info.privacy')}</Text>
+            <Card backgroundColor={colors.card} borderRadius={16} padding={16}>
+              <View style={styles.infoItem}>
+                <Text style={[styles.infoLabel, { color: colors.textSubtle }]}>{t('profile.bio')}</Text>
+                <Text style={[styles.infoValue, { color: colors.foreground }]}>{displayUser.bio}</Text>
               </View>
-              <MaterialIcons name="chevron-right" size={20} color={colors.textSubtle} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Settings */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSubtle }]}>{t('settings.title')}</Text>
-          <View style={[styles.menuCard, { backgroundColor: colors.card }]}>
-            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(main)/settings')}>
-              <View style={styles.menuItemLeft}>
-                <Ionicons name="settings-outline" size={20} color={colors.primary} />
-                <Text style={[styles.menuItemText, { color: colors.foreground }]}>{t('info.customization')}</Text>
+              <Separator borderColor={colors.border} marginVertical={6} />
+              <View style={styles.infoItem}>
+                <Text style={[styles.infoLabel, { color: colors.textSubtle }]}>{t('profile.email')}</Text>
+                <Text style={[styles.infoValue, { color: colors.foreground }]}>{displayUser.email}</Text>
               </View>
-              <MaterialIcons name="chevron-right" size={20} color={colors.textSubtle} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Settings & Support */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSubtle }]}>{t('info.privacy')}</Text>
-          <View style={[styles.menuCard, { backgroundColor: colors.card }]}>
-            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: colors.border }]} onPress={() => router.push('/(main)/change-password')}>
-              <View style={styles.menuItemLeft}>
-                <Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} />
-                <Text style={[styles.menuItemText, { color: colors.foreground }]}>{t('password.title')}</Text>
+              <Separator borderColor={colors.border} marginVertical={6} />
+              <View style={styles.infoItem}>
+                <Text style={[styles.infoLabel, { color: colors.textSubtle }]}>{t('profile.user_id')}</Text>
+                <Text style={[styles.infoValue, { color: colors.foreground }]} numberOfLines={1}>{displayUser.userId}</Text>
               </View>
-              <MaterialIcons name="chevron-right" size={20} color={colors.textSubtle} />
-            </TouchableOpacity>
+            </Card>
+          </YStack>
 
-            <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-              <View style={styles.menuItemLeft}>
-                <Ionicons name="log-out-outline" size={20} color="#ef4444" />
-                <Text style={[styles.menuItemText, { color: '#ef4444' }]}>{t('logout.title')}</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </View>
+          {/* Personal Storage */}
+          <YStack paddingHorizontal={20} marginTop={25}>
+            <Text style={[styles.sectionTitle, { color: colors.textSubtle }]}>{t('info.shared_media')}</Text>
+            <Card backgroundColor={colors.card} borderRadius={16} overflow="hidden" padded={false}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(main)/my-cloud')}>
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name="cloud-done-outline" size={20} color={colors.primary} />
+                  <Text style={[styles.menuItemText, { color: colors.foreground }]}>{t('cloud.title')}</Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={20} color={colors.textSubtle} />
+              </TouchableOpacity>
+            </Card>
+          </YStack>
 
+          {/* Settings */}
+          <YStack paddingHorizontal={20} marginTop={25}>
+            <Text style={[styles.sectionTitle, { color: colors.textSubtle }]}>{t('settings.title')}</Text>
+            <Card backgroundColor={colors.card} borderRadius={16} overflow="hidden" padded={false}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(main)/settings')}>
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name="settings-outline" size={20} color={colors.primary} />
+                  <Text style={[styles.menuItemText, { color: colors.foreground }]}>{t('info.customization')}</Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={20} color={colors.textSubtle} />
+              </TouchableOpacity>
+            </Card>
+          </YStack>
 
-        {/* Danger Zone */}
-        <View style={[styles.section, { marginBottom: 30 }]}>
-          <Text style={[styles.sectionTitle, { color: '#ef4444' }]}>{t('delete_account.title')}</Text>
-          <View style={[styles.menuCard, { backgroundColor: colors.card }]}>
-            <TouchableOpacity style={styles.menuItem} onPress={() => setShowDeleteModal(true)}>
-              <View style={styles.menuItemLeft}>
-                <Ionicons name="trash-outline" size={20} color="#ef4444" />
-                <Text style={[styles.menuItemText, { color: '#ef4444' }]}>{t('delete_account.title')}</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </View>
+          {/* Settings & Support */}
+          <YStack paddingHorizontal={20} marginTop={25}>
+            <Text style={[styles.sectionTitle, { color: colors.textSubtle }]}>{t('info.privacy')}</Text>
+            <Card backgroundColor={colors.card} borderRadius={16} overflow="hidden" padded={false}>
+              <TouchableOpacity style={[styles.menuItem, { borderBottomColor: colors.border }]} onPress={() => router.push('/(main)/change-password')}>
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} />
+                  <Text style={[styles.menuItemText, { color: colors.foreground }]}>{t('password.title')}</Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={20} color={colors.textSubtle} />
+              </TouchableOpacity>
 
+              <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name="log-out-outline" size={20} color="#ef4444" />
+                  <Text style={[styles.menuItemText, { color: '#ef4444' }]}>{t('logout.title')}</Text>
+                </View>
+              </TouchableOpacity>
+            </Card>
+          </YStack>
+
+          {/* Danger Zone */}
+          <YStack paddingHorizontal={20} marginTop={25} marginBottom={30}>
+            <Text style={[styles.sectionTitle, { color: '#ef4444' }]}>{t('delete_account.title')}</Text>
+            <Card backgroundColor={colors.card} borderRadius={16} overflow="hidden" padded={false}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => setShowDeleteModal(true)}>
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                  <Text style={[styles.menuItemText, { color: '#ef4444' }]}>{t('delete_account.title')}</Text>
+                </View>
+              </TouchableOpacity>
+            </Card>
+          </YStack>
+        </ResponsiveContainer>
       </ScrollView>
 
       <DeleteAccountModal
