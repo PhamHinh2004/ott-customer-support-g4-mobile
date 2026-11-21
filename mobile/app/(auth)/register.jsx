@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useResponsive } from '../../src/hooks/useResponsive';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { getStorageItem, setStorageItem, removeStorageItem } from '../../src/utils/storage';
@@ -25,6 +26,7 @@ import { getStorageItem, setStorageItem, removeStorageItem } from '../../src/uti
 const RegisterScreen = () => {
   const router = useRouter();
   const { register, sendOtp, verify, checkPhone, loading, error: authError, clearError } = useAuth();
+  const { formMaxWidth, isCompactHeight } = useResponsive();
   const COOLDOWN_MS = 2 * 60 * 1000;
 
   const [step, setStep] = useState('verify-email'); // 'verify-email' or 'register'
@@ -233,10 +235,11 @@ const RegisterScreen = () => {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView 
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, isCompactHeight && { paddingVertical: 16 }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          <View style={{ width: '100%', maxWidth: formMaxWidth, alignSelf: 'center' }}>
           <View style={styles.header}>
             <Text style={styles.title}>Đăng Ký</Text>
             <Text style={styles.subtitle}>
@@ -473,6 +476,7 @@ const RegisterScreen = () => {
           <TouchableOpacity onPress={() => router.push('/login')} style={styles.footer} activeOpacity={0.7}>
             <Text style={styles.footerText}>Đã có tài khoản? <Text style={styles.linkText}>Đăng nhập</Text></Text>
           </TouchableOpacity>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

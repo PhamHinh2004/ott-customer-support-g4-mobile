@@ -6,7 +6,6 @@ import {
   Modal,
   TouchableOpacity,
   TouchableWithoutFeedback,
-  Dimensions,
   Image,
   ScrollView,
 } from 'react-native';
@@ -16,15 +15,16 @@ import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
 import CONFIG from '../config';
 import { getCallLogText } from '../utils/messageUtils';
-
-const { width, height } = Dimensions.get('window');
+import { useResponsive } from '../hooks/useResponsive';
 
 const EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '😡'];
 
 const MessageModal = ({ visible, message, onClose, onAction, onReact, isOwn, isPinned }) => {
   const { t } = useTranslation();
+  const { width, modalMaxWidth } = useResponsive();
   const BASE_URL = CONFIG.BASE_URL;
   if (!message) return null;
+  const mediaWidth = Math.min(width * 0.7, 360);
 
   const handleAction = (type) => {
     onAction(type, message);
@@ -58,20 +58,20 @@ const MessageModal = ({ visible, message, onClose, onAction, onReact, isOwn, isP
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.overlay}>
           <TouchableWithoutFeedback>
-            <View style={styles.modalContent}>
+            <View style={[styles.modalContent, { width: modalMaxWidth }]}>
               {/* Message Focus Area */}
               <View style={[styles.focusContainer, isOwn ? styles.ownFocus : styles.otherFocus]}>
                 <View style={[
                   styles.bubble,
                   isOwn ? styles.ownBubble : styles.otherBubble,
-                  (message.type === 'IMAGE' || message.type === 'VIDEO') && styles.mediaBubble,
+                  (message.type === 'IMAGE' || message.type === 'VIDEO') && [styles.mediaBubble, { width: mediaWidth }],
                   message.type === 'FILE' && styles.fileBubbleModal
                 ]}>
                   {/* Image/Video Preview */}
                   {message.type === 'IMAGE' && message.mediaUrls?.[0] && (
                     <Image
                       source={{ uri: message.mediaUrls[0].startsWith('http') ? message.mediaUrls[0] : `${BASE_URL}${message.mediaUrls[0].startsWith('/') ? '' : '/'}${message.mediaUrls[0]}` }}
-                      style={styles.focusMedia}
+                      style={[styles.focusMedia, { height: mediaWidth }]}
                       resizeMode="cover"
                     />
                   )}
@@ -190,7 +190,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    width: width * 0.9,
     alignItems: 'center',
   },
   focusContainer: {
@@ -293,11 +292,9 @@ const styles = StyleSheet.create({
   mediaBubble: {
     padding: 4,
     overflow: 'hidden',
-    width: width * 0.7,
   },
   focusMedia: {
     width: '100%',
-    height: width * 0.7,
     borderRadius: 16,
   },
   focusVideoPlaceholder: {

@@ -99,13 +99,28 @@ function RootLayoutNav() {
   );
 }
 
-import { ThemeProvider } from '../src/context/ThemeContext';
+import { ThemeProvider, useTheme } from '../src/context/ThemeContext';
+import { TamaguiProvider, Theme } from 'tamagui';
+import tamaguiConfig from '../tamagui.config';
+
+function TamaguiRootWrapper({ children }) {
+  const { theme } = useTheme();
+  return (
+    <TamaguiProvider config={tamaguiConfig} defaultTheme={theme}>
+      <Theme name={theme}>
+        {children}
+      </Theme>
+    </TamaguiProvider>
+  );
+}
 
 export default function RootLayout() {
   return (
     <Provider store={store}>
       <ThemeProvider>
-        <RootLayoutNav />
+        <TamaguiRootWrapper>
+          <RootLayoutNav />
+        </TamaguiRootWrapper>
       </ThemeProvider>
     </Provider>
   );

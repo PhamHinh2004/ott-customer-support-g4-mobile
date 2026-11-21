@@ -5,13 +5,11 @@ import {
   TouchableOpacity,
   Image,
   StyleSheet,
-  Dimensions,
-  FlatList
+  FlatList,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
-
-const { width, height } = Dimensions.get('window');
 
 const VideoSlide = ({ url, shouldPlay }) => {
   const player = useVideoPlayer(url, (videoPlayer) => {
@@ -38,6 +36,7 @@ const VideoSlide = ({ url, shouldPlay }) => {
 };
 
 const MediaViewer = ({ visible, onClose, allMedia = [], initialIndex = 0 }) => {
+  const { width, height } = useWindowDimensions();
   const flatListRef = useRef(null);
   const [activeIndex, setActiveIndex] = React.useState(initialIndex);
 
@@ -67,7 +66,7 @@ const MediaViewer = ({ visible, onClose, allMedia = [], initialIndex = 0 }) => {
     const isVideo = item.type === 'VIDEO';
     const isCurrent = index === activeIndex;
     return (
-      <View style={styles.slide}>
+      <View style={[styles.slide, { width, height }]}>
         {isVideo ? (
           <VideoSlide url={item.url} shouldPlay={visible && isCurrent} />
         ) : (
@@ -132,8 +131,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   slide: {
-    width: width,
-    height: height,
     justifyContent: 'center',
     alignItems: 'center',
   },

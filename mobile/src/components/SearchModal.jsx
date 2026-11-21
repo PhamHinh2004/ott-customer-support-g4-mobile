@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
@@ -23,11 +22,11 @@ import { conversationApi } from '../api/chatApi';
 import { useRouter } from 'expo-router';
 import CONFIG from '../config';
 import { useTranslation } from 'react-i18next';
-
-const { width, height } = Dimensions.get('window');
+import { useResponsive } from '../hooks/useResponsive';
 
 const SearchModal = ({ visible, onClose }) => {
   const { t } = useTranslation();
+  const { modalMaxWidth } = useResponsive();
   const router = useRouter();
   const currentUser = useSelector(state => state.auth.user);
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -137,7 +136,7 @@ const SearchModal = ({ visible, onClose }) => {
           <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
             <KeyboardAvoidingView
               behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              style={styles.modalContainer}
+              style={[styles.modalContainer, { width: modalMaxWidth }]}
             >
               {/* Header */}
               <View style={styles.header}>
@@ -241,7 +240,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContainer: {
-    width: width * 0.9,
     backgroundColor: '#fff',
     borderRadius: 24,
     overflow: 'hidden',

@@ -1,30 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import {
   View,
-  TextInput,
   TouchableOpacity,
   Text,
   StyleSheet,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useResponsive } from '../../src/hooks/useResponsive';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { YStack, XStack, Card, Text as TText } from 'tamagui';
+import AppButton from '../../src/components/common/Button';
+import AppInput from '../../src/components/common/Input';
 
 import AccountRestoreModal from '../../src/components/AccountRestore/AccountRestoreModal';
 
 /**
  * LoginScreen (Mobile)
- * Redesigned for F5 Chat with premium dark theme and unified UI
+ * Redesigned for F5 Chat with Tamagui UI + Responsive layout (Phone / Landscape / Tablet)
  */
 
 const LoginScreen = () => {
   const router = useRouter();
   const { login, loading, error: authError, clearError, accessToken } = useAuth();
+  const { formMaxWidth, isCompactHeight, isTablet } = useResponsive();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,7 +35,6 @@ const LoginScreen = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [lockedAt, setLockedAt] = useState(null);
-  const [focusedInput, setFocusedInput] = useState(''); // '' or 'email' or 'password'
   const [deletionDate, setDeletionDate] = useState(null);
 
   // Clear errors when entering page
@@ -122,134 +124,135 @@ const LoginScreen = () => {
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isCompactHeight && { paddingVertical: 16 },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              <MaterialCommunityIcons name="flash" size={42} color="#6366f1" />
-            </View>
-            <Text style={styles.appName}>
-              <Text style={styles.appNameHighlight}>F5</Text> Chat
-            </Text>
-            <Text style={styles.subtitle}>Kết nối tức thì, Bảo mật tuyệt đối</Text>
-          </View>
-
-          {/* Form */}
-          <View style={styles.form}>
-            {/* Email Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Gmail</Text>
-              <View style={[
-                styles.inputWrapper,
-                localError ? styles.inputErrorBorder : null,
-                focusedInput === 'email' ? styles.inputActiveBorder : null
-              ]}>
-                <MaterialCommunityIcons
-                  name="email-outline"
-                  size={20}
-                  color={focusedInput === 'email' ? '#6366f1' : '#64748b'}
-                  style={styles.inputIcon}
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="user@gmail.com"
-                  placeholderTextColor="#475569"
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  editable={!loading}
-                  value={email}
-                  onFocus={() => setFocusedInput('email')}
-                  onBlur={() => setFocusedInput('')}
-                  onChangeText={(text) => {
-                    setEmail(text);
-                    setLocalError('');
-                  }}
-                />
+          <YStack width="100%" maxWidth={formMaxWidth} alignSelf="center">
+            {/* Header */}
+            <YStack alignItems="center" marginBottom={isCompactHeight ? 18 : 32}>
+              <View style={[styles.logoContainer, isTablet && { width: 92, height: 92, borderRadius: 28 }]}>
+                <MaterialCommunityIcons name="flash" size={isTablet ? 48 : 42} color="#6366f1" />
               </View>
-            </View>
+              <TText fontSize={isTablet ? 36 : 32} fontWeight="900" color="#ffffff" marginBottom={8} letterSpacing={-0.5}>
+                <TText color="#6366f1" fontWeight="900">F5</TText> Chat
+              </TText>
+              <TText fontSize={14} color="#94a3b8" textAlign="center" fontWeight="500">
+                Kết nối tức thì, Bảo mật tuyệt đối
+              </TText>
+            </YStack>
 
-            {/* Password Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Mật khẩu</Text>
-              <View style={[
-                styles.inputWrapper,
-                localError ? styles.inputErrorBorder : null,
-                focusedInput === 'password' ? styles.inputActiveBorder : null
-              ]}>
-                <MaterialCommunityIcons
-                  name="lock-outline"
-                  size={20}
-                  color={focusedInput === 'password' ? '#6366f1' : '#64748b'}
-                  style={styles.inputIcon}
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Nhập mật khẩu"
-                  placeholderTextColor="#475569"
-                  secureTextEntry={!showPassword}
-                  editable={!loading}
-                  value={password}
-                  onFocus={() => setFocusedInput('password')}
-                  onBlur={() => setFocusedInput('')}
-                  onChangeText={(text) => {
-                    setPassword(text);
-                    setLocalError('');
-                  }}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                  style={styles.toggleButton}
-                >
+            {/* Form (Tamagui Card + AppInput + AppButton) */}
+            <Card
+              backgroundColor="rgba(255, 255, 255, 0.025)"
+              borderWidth={1}
+              borderColor="rgba(255, 255, 255, 0.08)"
+              borderRadius={32}
+              padding={24}
+              paddingBottom={28}
+              gap={20}
+            >
+              <AppInput
+                label="Gmail"
+                darkSurface
+                placeholder="user@gmail.com"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                editable={!loading}
+                value={email}
+                error={localError ? ' ' : undefined}
+                leftIcon={
                   <MaterialCommunityIcons
-                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    name="email-outline"
                     size={20}
-                    color="#64748b"
+                    color="#6366f1"
                   />
-                </TouchableOpacity>
-              </View>
-            </View>
+                }
+                onChangeText={(text) => {
+                  setEmail(text);
+                  setLocalError('');
+                }}
+              />
 
-            {/* Error Message */}
-            {localError ? (
-              <View style={styles.errorContainer}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#ef4444" />
-                <Text style={styles.errorText}>{localError}</Text>
-              </View>
-            ) : null}
+              <AppInput
+                label="Mật khẩu"
+                darkSurface
+                placeholder="Nhập mật khẩu"
+                secureTextEntry={!showPassword}
+                editable={!loading}
+                value={password}
+                leftIcon={
+                  <MaterialCommunityIcons
+                    name="lock-outline"
+                    size={20}
+                    color="#6366f1"
+                  />
+                }
+                rightElement={
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.toggleButton}
+                  >
+                    <MaterialCommunityIcons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color="#64748b"
+                    />
+                  </TouchableOpacity>
+                }
+                onChangeText={(text) => {
+                  setPassword(text);
+                  setLocalError('');
+                }}
+              />
 
-            {/* Login Button */}
-            <TouchableOpacity
-              style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-              onPress={handleLogin}
-              disabled={loading}
-              activeOpacity={0.8}
-            >
-              {loading ? (
-                <ActivityIndicator color="#0c0714" />
-              ) : (
-                <Text style={styles.loginButtonText}>ĐĂNG NHẬP</Text>
-              )}
-            </TouchableOpacity>
+              {/* Error Message */}
+              {localError ? (
+                <XStack
+                  alignItems="center"
+                  gap="2"
+                  backgroundColor="rgba(239, 68, 68, 0.08)"
+                  padding={14}
+                  borderRadius={16}
+                  borderWidth={1}
+                  borderColor="rgba(239, 68, 68, 0.15)"
+                >
+                  <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#ef4444" />
+                  <Text style={styles.errorText}>{localError}</Text>
+                </XStack>
+              ) : null}
 
-            <TouchableOpacity 
-              style={styles.forgotPasswordButton}
-              onPress={() => router.push('/forgot-password')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.forgotPasswordText}>Quên mật khẩu?</Text>
-            </TouchableOpacity>
-          </View>
+              {/* Login Button */}
+              <AppButton
+                title="ĐĂNG NHẬP"
+                variant="light"
+                height={56}
+                borderRadius={28}
+                marginTop={4}
+                loading={loading}
+                onPress={handleLogin}
+              />
 
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Chưa có tài khoản?</Text>
-            <TouchableOpacity onPress={() => router.push('/register')} activeOpacity={0.7}>
-              <Text style={styles.registerLink}>Đăng ký ngay</Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                style={styles.forgotPasswordButton}
+                onPress={() => router.push('/forgot-password')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.forgotPasswordText}>Quên mật khẩu?</Text>
+              </TouchableOpacity>
+            </Card>
+
+            {/* Footer */}
+            <XStack justifyContent="center" alignItems="center" gap="1-5" marginTop={20}>
+              <Text style={styles.footerText}>Chưa có tài khoản?</Text>
+              <TouchableOpacity onPress={() => router.push('/register')} activeOpacity={0.7}>
+                <Text style={styles.registerLink}>Đăng ký ngay</Text>
+              </TouchableOpacity>
+            </XStack>
+          </YStack>
         </ScrollView>
       </KeyboardAvoidingView>
 

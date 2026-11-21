@@ -5,19 +5,20 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useDispatch } from 'react-redux';
 import { authApi } from '../../src/api/authApi';
 import { logoutUser } from '../../src/store/authSlice';
 import { useTheme } from '../../src/context/ThemeContext';
+import ResponsiveContainer from '../../src/components/common/ResponsiveContainer';
 
 
 const ChangePasswordScreen = () => {
@@ -110,6 +111,7 @@ const ChangePasswordScreen = () => {
 
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <ResponsiveContainer variant="form" maxWidth={560}>
           {/* Mật khẩu cũ */}
           <View style={styles.inputGroup}>
             <View style={styles.labelWithIcon}>
@@ -188,6 +190,7 @@ const ChangePasswordScreen = () => {
               </>
             )}
           </TouchableOpacity>
+          </ResponsiveContainer>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

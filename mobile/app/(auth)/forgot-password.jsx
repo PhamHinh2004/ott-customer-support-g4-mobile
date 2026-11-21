@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useResponsive } from '../../src/hooks/useResponsive';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { getStorageItem, setStorageItem, removeStorageItem } from '../../src/utils/storage';
@@ -25,6 +26,7 @@ import { getStorageItem, setStorageItem, removeStorageItem } from '../../src/uti
 const ForgotPasswordScreen = () => {
   const router = useRouter();
   const { forgotPassword, resetPassword, sendOtp, loading, clearError } = useAuth();
+  const { formMaxWidth, isCompactHeight } = useResponsive();
   const COOLDOWN_MS = 2 * 60 * 1000;
 
   const [step, setStep] = useState('request'); // 'request' or 'reset'
@@ -223,10 +225,11 @@ const ForgotPasswordScreen = () => {
         style={{ flex: 1 }}
       >
         <ScrollView 
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, isCompactHeight && { paddingVertical: 16 }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          <View style={{ width: '100%', maxWidth: formMaxWidth, alignSelf: 'center' }}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.7}>
             <MaterialCommunityIcons name="arrow-left" size={24} color="#ffffff" />
           </TouchableOpacity>
@@ -407,6 +410,7 @@ const ForgotPasswordScreen = () => {
                 </Text>
               </TouchableOpacity>
             )}
+          </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

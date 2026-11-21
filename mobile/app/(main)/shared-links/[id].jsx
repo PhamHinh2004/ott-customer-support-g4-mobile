@@ -13,11 +13,13 @@ import { useSelector } from 'react-redux';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getRealId } from '../../../src/store/chatSlice';
+import { useResponsive } from '../../../src/hooks/useResponsive';
 
 const SharedLinksScreen = () => {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { isWide, contentMaxWidth } = useResponsive();
   
   const messagesFromStore = useSelector((state) => state.chat.messages);
   const realId = useMemo(() => {
@@ -127,7 +129,10 @@ const SharedLinksScreen = () => {
           data={sharedLinks}
           renderItem={renderLinkItem}
           keyExtractor={(item, index) => item?.id ? `${item.id}_${index}` : `link_${index}`}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            isWide && { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' },
+          ]}
           showsVerticalScrollIndicator={false}
         />
       )}

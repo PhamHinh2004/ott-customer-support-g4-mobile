@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Tabs, router } from 'expo-router';
-import { View, Text, Platform, Animated, Dimensions, TouchableOpacity, DeviceEventEmitter } from 'react-native';
+import { View, Text, Platform, Animated, TouchableOpacity, DeviceEventEmitter } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
@@ -10,10 +10,7 @@ import { addNotification, setInAppNotification } from '../../src/store/notificat
 import { useAgoraCall } from '../../src/hooks/useAgoraCall';
 import VideoCall from '../../src/components/VideoCall';
 import { useTranslation } from 'react-i18next';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const TAB_BAR_WIDTH = SCREEN_WIDTH - 32;
-const TAB_WIDTH = TAB_BAR_WIDTH / 5;
+import { useResponsive } from '../../src/hooks/useResponsive';
 
 export default function MainLayout() {
   const { t } = useTranslation();
@@ -166,14 +163,12 @@ export default function MainLayout() {
 }
 
 const CustomTabBar = ({ state, descriptors, emitter, navigateToTab, badge }) => {
-  const focusedOptions = descriptors[state.routes[state.index].key].options;
-
-  if (focusedOptions.tabBarStyle?.display === 'none') {
-    return null;
-  }
-
+  const focusedOptions = descriptors[state.routes[state.index].key]?.options || {};
+  const { width, tabBarWidth } = useResponsive();
   const translateX = useRef(new Animated.Value(0)).current;
   const user = useSelector((state) => state.auth.user);
+
+  const isHidden = focusedOptions.tabBarStyle?.display === 'none';
 
   // Danh sách các Tab được phép hiển thị (Whitelist)
   const allowedTabs = ['index', 'contacts', 'shop-expert-ai', 'notifications', 'profile'];
@@ -184,23 +179,18 @@ const CustomTabBar = ({ state, descriptors, emitter, navigateToTab, badge }) => 
     'change-password': 'profile',
     'settings': 'profile',
     'language-settings': 'profile',
-    // Thêm các ánh xạ khác nếu cần
   };
 
-  // Lọc lấy các route nằm trong danh sách cho phép
   const visibleRoutes = state.routes.filter(route => allowedTabs.includes(route.name));
-
-  // Tìm tên Tab chính dựa trên route hiện tại
-  const currentRouteName = state.routes[state.index].name;
+  const currentRouteName = state.routes[state.index]?.name;
   const activeTabName = routeMap[currentRouteName] || currentRouteName;
-
-  // Tìm index thực tế trong danh sách 4 Tab hiển thị
   const activeIndex = visibleRoutes.findIndex(route => route.name === activeTabName);
 
-  const actualTabWidth = TAB_BAR_WIDTH / visibleRoutes.length;
+  const actualTabWidth = visibleRoutes.length > 0 ? tabBarWidth / visibleRoutes.length : tabBarWidth;
+  const sideHorizontal = Math.max(16, (width - tabBarWidth) / 2);
 
   useEffect(() => {
-    if (activeIndex >= 0) {
+    if (!isHidden && activeIndex >= 0) {
       Animated.spring(translateX, {
         toValue: activeIndex * actualTabWidth,
         useNativeDriver: true,
@@ -208,7 +198,11 @@ const CustomTabBar = ({ state, descriptors, emitter, navigateToTab, badge }) => 
         tension: 40,
       }).start();
     }
-  }, [activeIndex]);
+  }, [isHidden, activeIndex, actualTabWidth, translateX]);
+
+  if (isHidden) {
+    return null;
+  }
 
   const pathData = `M 0 0 
     L ${actualTabWidth / 2 - 35} 0 
@@ -220,19 +214,28 @@ const CustomTabBar = ({ state, descriptors, emitter, navigateToTab, badge }) => 
     Z`;
 
   return (
-    <View style={styles.tabBarContainer}>
-      <View style={styles.tabBarInner}>
+    <View style={[styles.tabBarContainer, { left: sideHorizontal, right: sideHorizontal }]}>
+      <View style={[styles.tabBarInner, { width: tabBarWidth }]}>
         {/* Dải nền liên tục màu Tối sâu (Dark Slate) */}
-        <Animated.View style={[styles.slidingBackground, { transform: [{ translateX }] }]}>
-          <View style={styles.leftFill} />
+        <Animated.View
+          style={[
+            styles.slidingBackground,
+            {
+              left: -tabBarWidth,
+              width: tabBarWidth * 3,
+              transform: [{ translateX }],
+            },
+          ]}
+        >
+          <View style={[styles.leftFill, { width: tabBarWidth }]} />
           <Svg width={actualTabWidth} height={70} viewBox={`0 0 ${actualTabWidth} 70`}>
             <Path d={pathData} fill="#111827" />
           </Svg>
-          <View style={styles.rightFill} />
+          <View style={[styles.rightFill, { width: tabBarWidth * 2 }]} />
         </Animated.View>
       </View>
 
-      <View style={styles.itemsContainer}>
+      <View style={[styles.itemsContainer, { width: tabBarWidth }]}>
         {visibleRoutes.map((route, index) => {
           const { options } = descriptors[route.key];
           const isFocused = activeIndex === index;
@@ -270,6 +273,7 @@ const CustomTabBar = ({ state, descriptors, emitter, navigateToTab, badge }) => 
                 name={options.icon}
                 focused={isFocused}
                 title={options.title}
+                tabWidth={actualTabWidth}
                 badge={route.name === 'notifications' ? badge : null}
               />
             </TouchableOpacity>
@@ -280,7 +284,7 @@ const CustomTabBar = ({ state, descriptors, emitter, navigateToTab, badge }) => 
   );
 };
 
-const TabIcon = ({ name, focused, title, badge }) => {
+const TabIcon = ({ name, focused, title, badge, tabWidth }) => {
   const translateY = useRef(new Animated.Value(0)).current;
   const iconScale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -305,7 +309,7 @@ const TabIcon = ({ name, focused, title, badge }) => {
   }, [focused]);
 
   return (
-    <View style={styles.iconWrapper}>
+    <View style={[styles.iconWrapper, { width: tabWidth }]}>
       <Animated.View style={[
         styles.circle,
         {
@@ -359,7 +363,6 @@ const styles = {
     position: 'absolute',
     bottom: 0,
     height: 70,
-    width: TAB_BAR_WIDTH,
     borderRadius: 35,
     overflow: 'hidden',
     backgroundColor: 'transparent',
@@ -367,24 +370,19 @@ const styles = {
   slidingBackground: {
     flexDirection: 'row',
     position: 'absolute',
-    left: -TAB_BAR_WIDTH,
-    width: TAB_BAR_WIDTH * 3,
     height: 70,
   },
   leftFill: {
-    width: TAB_BAR_WIDTH,
     height: 70,
     backgroundColor: '#111827',
   },
   rightFill: {
-    width: TAB_BAR_WIDTH * 2,
     height: 70,
     backgroundColor: '#111827',
   },
   itemsContainer: {
     flexDirection: 'row',
     height: 70,
-    width: TAB_BAR_WIDTH,
   },
   tabItem: {
     flex: 1,
@@ -395,7 +393,6 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     height: 70,
-    width: TAB_WIDTH,
   },
   circle: {
     position: 'absolute',

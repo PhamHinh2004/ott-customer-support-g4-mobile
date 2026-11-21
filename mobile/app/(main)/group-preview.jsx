@@ -8,17 +8,15 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
-  SafeAreaView,
-  Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSelector } from 'react-redux';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { useTheme } from '../../src/context/ThemeContext';
 import CONFIG from '../../src/config';
-
-const { width } = Dimensions.get('window');
+import ResponsiveContainer from '../../src/components/common/ResponsiveContainer';
 
 export default function GroupPreviewScreen() {
   const { conversationId } = useLocalSearchParams();
@@ -188,6 +186,7 @@ export default function GroupPreviewScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ResponsiveContainer maxWidth={580}>
         {/* Profile Card */}
         <View style={[styles.card, { backgroundColor: isDark ? '#1e293b' : '#ffffff' }]}>
           <View style={styles.avatarWrapper}>
@@ -280,6 +279,7 @@ export default function GroupPreviewScreen() {
             )}
           </View>
         )}
+        </ResponsiveContainer>
       </ScrollView>
 
       {/* Footer Actions */}

@@ -6,19 +6,23 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
-  SafeAreaView,
   ActivityIndicator,
   RefreshControl,
   TextInput,
   Alert,
   DeviceEventEmitter,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, Ionicons, FontAwesome } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { friendApi } from '../../src/api/friendApi';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { useResponsive } from '../../src/hooks/useResponsive';
+import { Card, XStack, YStack, Text as TText } from 'tamagui';
+import AppAvatar from '../../src/components/common/Avatar';
+import ResponsiveContainer from '../../src/components/common/ResponsiveContainer';
 
 
 import CONFIG from '../../src/config';
@@ -26,6 +30,7 @@ import CONFIG from '../../src/config';
 const ContactsScreen = () => {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const { contactColumns, isWide, contentMaxWidth } = useResponsive();
   const router = useRouter();
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
@@ -131,76 +136,101 @@ const ContactsScreen = () => {
   };
 
   const renderFriendItem = ({ item }) => (
-    <View style={[styles.friendItem, { backgroundColor: colors.card }]}>
-      <Image 
-        source={{ uri: getAvatarUrl(item.avatarUrl, item.fullName) }} 
-        style={styles.avatar} 
-      />
-      <View style={styles.infoContainer}>
-        <Text style={[styles.name, { color: colors.foreground }]}>{item.fullName || item.username || t('common.user')}</Text>
-        <Text style={[styles.phone, { color: colors.textMuted }]}>{item.phoneNumber || t('user_info.no_phone')}</Text>
+    <Card
+      flex={1}
+      flexDirection="row"
+      alignItems="center"
+      backgroundColor={colors.card}
+      padding={12}
+      borderRadius={16}
+      marginBottom={12}
+      marginHorizontal={isWide ? 6 : 0}
+      borderWidth={1}
+      borderColor={colors.border}
+      padded={false}
+    >
+      <View style={{ marginRight: 14 }}>
+        <AppAvatar
+          uri={getAvatarUrl(item.avatarUrl, item.fullName)}
+          name={item.fullName || item.username || t('common.user')}
+          size={50}
+          isOnline={item.status === 'ONLINE' || item.isOnline === true}
+          borderColor={colors.card}
+        />
       </View>
-      <View style={styles.actions}>
-        <TouchableOpacity 
-          style={[styles.actionButton, { backgroundColor: colors.surface200 }]} 
+      <YStack flex={1} paddingRight={8}>
+        <TText fontSize={16} fontWeight="700" color={colors.foreground} numberOfLines={1}>
+          {item.fullName || item.username || t('common.user')}
+        </TText>
+        <TText fontSize={13} color={colors.textMuted} marginTop={2} numberOfLines={1}>
+          {item.phoneNumber || t('user_info.no_phone')}
+        </TText>
+      </YStack>
+      <XStack gap={8}>
+        <TouchableOpacity
+          style={[styles.actionButton, { backgroundColor: colors.surface200 }]}
           onPress={() => handleChat(item)}
         >
-          <MaterialIcons name="chat" size={24} color={colors.primary} />
+          <MaterialIcons name="chat" size={22} color={colors.primary} />
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.unfriendButton, { backgroundColor: colors.card, borderColor: colors.border }]} 
+        <TouchableOpacity
+          style={[styles.actionButton, styles.unfriendButton, { backgroundColor: colors.card, borderColor: colors.border }]}
           onPress={() => handleUnfriend(item)}
         >
-          <MaterialIcons name="person-remove" size={24} color={colors.textSubtle} />
+          <MaterialIcons name="person-remove" size={22} color={colors.textSubtle} />
         </TouchableOpacity>
-      </View>
-    </View>
-
+      </XStack>
+    </Card>
   );
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-        <View style={styles.headerTop}>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>{t('friends.title_list')}</Text>
-          <TouchableOpacity 
-            style={[styles.requestButton, { backgroundColor: colors.primary }]}
-            onPress={() => router.push('/notifications')}
-          >
-            <MaterialIcons name="notifications" size={18} color="#fff" />
-            <Text style={styles.requestButtonText}>{t('friends.tabs.requests')}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={[styles.searchContainer, { backgroundColor: colors.input }]}>
-          <MaterialIcons name="search" size={20} color={colors.textSubtle} style={styles.searchIcon} />
-          <TextInput
-            style={[styles.searchInput, { color: colors.foreground }]}
-            placeholder={t('friends.search_placeholder')}
-            placeholderTextColor={colors.textSubtle}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <MaterialIcons name="close" size={20} color={colors.textSubtle} />
+        <ResponsiveContainer maxWidth={isWide ? 960 : contentMaxWidth}>
+          <View style={styles.headerTop}>
+            <TText fontSize={24} fontWeight="800" color={colors.foreground}>{t('friends.title_list')}</TText>
+            <TouchableOpacity
+              style={[styles.requestButton, { backgroundColor: colors.primary }]}
+              onPress={() => router.push('/notifications')}
+            >
+              <MaterialIcons name="notifications" size={18} color="#fff" />
+              <Text style={styles.requestButtonText}>{t('friends.tabs.requests')}</Text>
             </TouchableOpacity>
-          )}
-        </View>
-      </View>
+          </View>
 
+          <View style={[styles.searchContainer, { backgroundColor: colors.input }]}>
+            <MaterialIcons name="search" size={20} color={colors.textSubtle} style={styles.searchIcon} />
+            <TextInput
+              style={[styles.searchInput, { color: colors.foreground }]}
+              placeholder={t('friends.search_placeholder')}
+              placeholderTextColor={colors.textSubtle}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <MaterialIcons name="close" size={20} color={colors.textSubtle} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </ResponsiveContainer>
+      </View>
 
       {loading && !refreshing ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
-
       ) : (
         <FlatList
+          key={`contacts-cols-${contactColumns}`}
+          numColumns={contactColumns}
           data={filteredFriends}
           renderItem={renderFriendItem}
           keyExtractor={(item) => (item.userId || item.id || Math.random().toString())}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            isWide && { maxWidth: 960, width: '100%', alignSelf: 'center' },
+          ]}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#667eea" />
           }

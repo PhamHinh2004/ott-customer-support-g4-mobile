@@ -6,7 +6,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
-  Dimensions,
   Animated,
   TouchableWithoutFeedback,
   Platform,
@@ -14,12 +13,12 @@ import {
 
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+import { useResponsive } from '../../hooks/useResponsive';
 
 const UserActionModal = ({ visible, onClose, user, onMention, onMessage, onCall }) => {
   const { colors, isDark } = useTheme();
-  const slideAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const { height: screenHeight, contentMaxWidth, isWide } = useResponsive();
+  const slideAnim = React.useRef(new Animated.Value(screenHeight)).current;
   const isUserOnline = user?.isOnline === true || 
                        String(user?.status || user?.presence || '').toUpperCase() === 'ONLINE';
 
@@ -33,12 +32,12 @@ const UserActionModal = ({ visible, onClose, user, onMention, onMessage, onCall 
       }).start();
     } else {
       Animated.timing(slideAnim, {
-        toValue: SCREEN_HEIGHT,
+        toValue: screenHeight,
         duration: 250,
         useNativeDriver: true,
       }).start();
     }
-  }, [visible]);
+  }, [visible, screenHeight]);
 
   if (!user && visible) return null;
 
@@ -66,6 +65,9 @@ const UserActionModal = ({ visible, onClose, user, onMention, onMessage, onCall 
             styles.sheet,
             {
               backgroundColor: colors.card,
+              width: '100%',
+              maxWidth: isWide ? Math.min(contentMaxWidth, 560) : undefined,
+              alignSelf: 'center',
               transform: [{ translateY: slideAnim }],
             },
           ]}

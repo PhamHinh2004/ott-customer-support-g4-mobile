@@ -35,6 +35,7 @@ import * as ImagePicker from 'expo-image-picker';
 import InviteMemberModal from '../../../src/components/chat/InviteMemberModal';
 import AIAssistantPanel from '../../../src/components/chat/AIAssistantPanel';
 import ReportModal from '../../../src/components/ReportModal';
+import ResponsiveContainer from '../../../src/components/common/ResponsiveContainer';
 
 // Helper Components defined outside to prevent re-mounting on every render
 const InfoItem = ({ icon, label, description, onPress, colors, isDark, color = '#fff', showArrow = true, rightElement, disabled }) => (
@@ -620,6 +621,7 @@ const ChatInfoScreen = () => {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ResponsiveContainer>
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <TouchableOpacity
@@ -1002,6 +1004,7 @@ const ChatInfoScreen = () => {
         </View>
 
         <View style={{ height: 40 + insets.bottom }} />
+        </ResponsiveContainer>
       </ScrollView>
 
       <InviteMemberModal
